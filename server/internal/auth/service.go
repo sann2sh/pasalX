@@ -66,11 +66,18 @@ const (
 
 // Service implements authentication, device registration, leases and revocation.
 type Service struct {
-	db       *pgxpool.Pool
-	keys     *Keys
-	now      func() time.Time
-	userFail *failureLimiter
-	ipFail   *failureLimiter
+	db              *pgxpool.Pool
+	keys            *Keys
+	now             func() time.Time
+	userFail        *failureLimiter
+	ipFail          *failureLimiter
+	onDeviceRevoked func(deviceID, deviceCode string)
+}
+
+// SetOnDeviceRevoked registers a post-commit hook fired whenever Revoke
+// marks a device REVOKED, used to terminate live SSE streams immediately.
+func (s *Service) SetOnDeviceRevoked(fn func(deviceID, deviceCode string)) {
+	s.onDeviceRevoked = fn
 }
 
 // NewService wires the auth service. Lockout policy: 5 failed attempts per
@@ -695,6 +702,9 @@ func (s *Service) Revoke(ctx context.Context, sess Session, in RevokeInput, ip s
 		}
 		log.Printf("auth: revoke failed: %v", err)
 		return nil, errInternal
+	}
+	if s.onDeviceRevoked != nil {
+		s.onDeviceRevoked(res.Device.ID, res.Device.Code)
 	}
 	return &res, nil
 }

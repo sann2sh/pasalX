@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const maxAuthBody = 16 << 10 // 16 KiB
@@ -215,6 +216,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(15 * time.Second))
 	w.Header().Set("Content-Type", "application/json")
 	// Responses can carry KEK material and tokens: never cache.
 	w.Header().Set("Cache-Control", "no-store")

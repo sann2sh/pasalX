@@ -13,6 +13,7 @@ import (
 
 	"pasalx/server/internal/auth"
 	"pasalx/server/internal/db"
+	psync "pasalx/server/internal/sync"
 )
 
 func main() {
@@ -38,6 +39,13 @@ func main() {
 	authSvc := auth.NewService(pool, keys)
 	authHandler := auth.NewHandler(authSvc, os.Getenv("TRUST_PROXY") == "1")
 
+	syncHub := psync.NewHub()
+	authSvc.SetOnDeviceRevoked(func(deviceID, _ string) {
+		syncHub.RevokeDevice(deviceID)
+	})
+	syncSvc := psync.NewService(pool, syncHub)
+	syncHandler := psync.NewHandler(syncSvc)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -52,6 +60,7 @@ func main() {
 		w.Write([]byte(`{"status":"ok","service":"pasalx-server","db":"ok"}`))
 	})
 	authHandler.Routes(mux)
+	syncHandler.Routes(mux, authHandler.RequireAuth)
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%s", port),
@@ -72,6 +81,7 @@ func main() {
 
 	<-ctx.Done()
 	log.Printf("Shutting down...")
+	syncHub.Shutdown()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
