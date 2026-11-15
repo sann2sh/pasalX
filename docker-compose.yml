@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pasalx-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pasalx
+      POSTGRES_PASSWORD: pasalx_dev_pass
+      POSTGRES_DB: pasalx_db
+    ports:
+      - "5432:5432"
+    command: >
+      postgres
+        -c shared_buffers=128MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=32MB
+        -c effective_cache_size=512MB
+        -c max_connections=25
+        -c wal_buffers=4MB
+        -c log_destination=stderr
+        -c logging_collector=off
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
