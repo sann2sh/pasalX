@@ -1,0 +1,292 @@
+<!DOCTYPE html><html class="h-full" lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "surface-dim": "#d4dcd7", "outline": "#707974", "surface": "#f4fbf6", "primary-fixed": "#b8eed4", "surface-container": "#e8f0ea", "inverse-surface": "#2b322f", "on-secondary": "#ffffff", "surface-bright": "#f4fbf6", "inverse-on-surface": "#ebf2ed", "on-tertiary-fixed-variant": "#3f4945", "background": "#f4fbf6", "primary": "#215542", "primary-fixed-dim": "#9cd2b9", "tertiary": "#454f4b", "on-secondary-fixed-variant": "#294e40", "tertiary-container": "#5d6762", "primary-container": "#3b6e59", "on-error-container": "#93000a", "on-primary-fixed": "#002115", "on-tertiary-fixed": "#151d1a", "on-surface": "#161d1a", "tertiary-fixed": "#dbe5df", "inverse-primary": "#9cd2b9", "surface-container-high": "#e3eae5", "on-secondary-fixed": "#002116", "tertiary-fixed-dim": "#bfc9c3", "secondary-fixed": "#c3ecd9", "secondary": "#416657", "on-primary": "#ffffff", "on-primary-container": "#b7eed4", "surface-container-highest": "#dde4df", "secondary-fixed-dim": "#a7cfbd", "secondary-container": "#c0e9d6", "surface-container-low": "#eef5f0", "surface-container-lowest": "#ffffff", "on-surface-variant": "#404944", "outline-variant": "#c0c9c2", "on-secondary-container": "#456a5b", "on-background": "#161d1a", "on-error": "#ffffff", "on-tertiary-container": "#dbe5df", "error-container": "#ffdad6", "on-primary-fixed-variant": "#1b503c", "on-tertiary": "#ffffff", "surface-tint": "#356853", "surface-variant": "#dde4df", "error": "#ba1a1a" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "space-xs": "0.25rem", "space-lg": "1.5rem", "space-md": "1rem", "space-sm": "0.5rem", "space-xl": "2.5rem", "gutter": "1.5rem", "margin": "3rem", "gutter-mobile": "1rem", "margin-mobile": "1.25rem" }, "fontFamily": { "display-lg-mobile": ["Plus Jakarta Sans"], "label-sm": ["Inter"], "headline-lg-mobile": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "body-lg": ["Plus Jakarta Sans"], "label-md": ["Inter"], "headline-sm": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"] }, "fontSize": { "display-lg-mobile": ["2.25rem", { "lineHeight": "2.75rem", "letterSpacing": "-0.02em", "fontWeight": "400" }], "label-sm": ["0.6875rem", { "lineHeight": "0.875rem", "letterSpacing": "0.1em", "fontWeight": "500" }], "headline-lg-mobile": ["1.5rem", { "lineHeight": "2rem", "letterSpacing": "-0.015em", "fontWeight": "500" }], "body-sm": ["0.8125rem", { "lineHeight": "1.25rem", "letterSpacing": "0.01em", "fontWeight": "400" }], "body-md": ["0.9375rem", { "lineHeight": "1.5rem", "letterSpacing": "0em", "fontWeight": "400" }], "body-lg": ["1.125rem", { "lineHeight": "1.75rem", "letterSpacing": "-0.005em", "fontWeight": "400" }], "label-md": ["0.75rem", { "lineHeight": "1rem", "letterSpacing": "0.08em", "fontWeight": "600" }], "headline-sm": ["1.25rem", { "lineHeight": "1.75rem", "letterSpacing": "-0.01em", "fontWeight": "600" }], "display-lg": ["3.5rem", { "lineHeight": "4rem", "letterSpacing": "-0.03em", "fontWeight": "400" }], "headline-lg": ["2rem", { "lineHeight": "2.5rem", "letterSpacing": "-0.02em", "fontWeight": "500" }] } } } }</script><style>@layer base{html,body{width:100%;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md min-h-full flex flex-col antialiased selection:bg-secondary-container"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-16 px-margin-mobile flex items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm min-w-0"><div class="flex flex-col"><div class="flex items-center gap-1.5"><span class="font-headline-sm text-headline-sm tracking-tight text-on-surface truncate">Stock Intake</span></div></div></div><div class="flex items-center gap-space-sm"><div class="flex items-center justify-center w-11 h-11 text-secondary hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">sync</span></div><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex-1 flex flex-col relative w-full px-margin-mobile pt-16 pb-24 bg-surface min-h-screen"><div class="flex flex-col w-full pb-8">
+<!-- Sub-Header Status Bar (No double-header, clean micro-kicker) -->
+
+<!-- Category Pills (Horizontal Scrollable) -->
+<div class="flex items-center gap-2 overflow-x-auto pb-2 mb-5 no-scrollbar">
+<button class="category-pill flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md whitespace-nowrap shadow-sm transition-all duration-200" type="button">
+<span>💄</span>
+<span>Lipsticks / Face</span>
+</button>
+<button class="category-pill flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md whitespace-nowrap transition-all duration-200" type="button">
+<span>🧴</span>
+<span>Haircare / Bottles</span>
+</button>
+<button class="category-pill flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md whitespace-nowrap transition-all duration-200" type="button">
+<span>☀️</span>
+<span>Skincare / SPF</span>
+</button>
+<button class="category-pill flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-surface-container text-on-surface-variant hover:text-on-surface font-label-md text-label-md whitespace-nowrap transition-all duration-200" type="button">
+<span>💍</span>
+<span>Accessories (Generic)</span>
+</button>
+</div>
+<!-- Smart Form Panel -->
+<div class="bg-surface-container-low rounded-xl p-4 mb-5 flex flex-col gap-4 shadow-sm">
+<!-- Row 1: Product & Brand -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Product Name</label>
+<div class="relative flex items-center">
+<input class="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md px-3.5 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs transition-colors" id="input-prod-name" type="text" value="Maybelline Fit Me Matte Foundation">
+<span class="material-symbols-outlined text-[18px] text-primary absolute right-3 pointer-events-none">verified</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Brand</label>
+<input class="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md px-3.5 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs transition-colors" id="input-brand" type="text" value="Maybelline New York">
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Shade &amp; Swatch</label>
+<div class="flex items-center gap-2 bg-surface-container-lowest px-3 py-1.5 rounded-lg shadow-xs">
+<span class="w-6 h-6 rounded-full shrink-0 shadow-inner" style="background-color: #E0B083;"></span>
+<input class="w-full min-w-0 bg-transparent text-on-surface font-body-sm text-body-sm outline-none" id="input-shade" type="text" value="#128 Warm Nude">
+</div>
+</div>
+</div>
+<!-- Supplier info with pan tag -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Supplier &amp; Tax Ledger</label>
+
+</div>
+<input class="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md px-3.5 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs transition-colors" type="text" value="Nepal Beauty Distributors Ltd.">
+</div>
+<!-- Pricing Row with Owner Cost Lock Badge -->
+<div class="grid grid-cols-2 gap-3">
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Wholesale Cost</label>
+
+</div>
+<div class="relative flex items-center">
+<span class="absolute left-3 font-label-md text-label-md text-tertiary">Rs.</span>
+<input class="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md pl-9 pr-3 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs" type="text" value="800">
+</div>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-primary font-semibold">Retail MRP</label>
+<div class="relative flex items-center">
+<span class="absolute left-3 font-label-md text-label-md text-primary font-bold">Rs.</span>
+<input class="w-full bg-surface-container-lowest text-on-surface font-body-md text-body-md pl-9 pr-3 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs font-semibold" id="input-mrp" type="text" value="1,350">
+</div>
+</div>
+</div>
+<!-- Batch Code, Expiry & Intake Quantity -->
+<div class="grid grid-cols-3 gap-2">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant truncate">Lot / Batch</label>
+<input class="w-full bg-surface-container-lowest text-on-surface font-label-sm text-label-sm px-2.5 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs" id="input-lot" type="text" value="LOT-MAY-2026-B1">
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant truncate">Exp Date</label>
+<input class="w-full bg-surface-container-lowest text-on-surface font-body-sm text-body-sm px-2.5 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-primary shadow-xs text-center" id="input-exp" type="text" value="05/2028">
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-md text-label-md uppercase tracking-wider text-primary font-semibold truncate">Qty Inward</label>
+<div class="flex items-center bg-surface-container-lowest rounded-lg shadow-xs overflow-hidden">
+<input class="w-full text-center bg-transparent text-primary font-headline-sm text-headline-sm py-1.5 outline-none font-bold" id="input-qty" type="number" value="24">
+</div>
+</div>
+</div>
+</div>
+<!-- Visual Asset Formulation Preview -->
+<div class="mb-5 flex items-center gap-3 p-3 bg-surface-container-high rounded-xl">
+<img class="w-16 h-16 rounded-lg object-cover shadow-xs shrink-0" data-alt="Minimalist apothecary cosmetic bottle portrait with frosted glass, subtle eucalyptus botanicals and natural morning daylight on pure chalk stone surface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9x0j4Ssv8t2sIj1nvgKucLnopU38WmKHSzX13u-uukDABjKQhhMiM4NVa6_GuxaIhnZGzpxD03IfK9-No90bGnXeUNvlhTNH2srR8Zr_mTOPp-LJva_fj-dXqKs_cuSjFBBauCibOhTwrVdc7rVAgwZ0qTZErREuz6DF2NPDeQz68ho9jpFdMWGd45xXsInQBsUcMXD6Z67gbLem8qtAhghPeRwB5hKpPq94-hA4">
+<div class="flex flex-col min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-primary font-semibold">SKU Catalog Matched</span>
+<span class="material-symbols-outlined text-primary text-[14px]">check_circle</span>
+</div>
+<p class="font-headline-sm text-headline-sm text-on-surface truncate">Fit Me Matte Poreless</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Normal to oily finish • Micro-powders formula</p>
+</div>
+</div>
+<!-- Physical Dual-Column Thermal Label Preview Section -->
+<div class="mb-5">
+<div class="flex items-center justify-between mb-2.5 px-0.5">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[17px] text-tertiary">barcode_scanner</span>
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-surface">Dual 62×20mm Label Preview</span>
+</div>
+
+</div>
+<!-- Scaled Thermal Label Viewport -->
+<div class="relative bg-surface-container-highest p-3 rounded-xl flex items-center justify-center gap-2 overflow-x-auto shadow-inner">
+<!-- Label Column 1 (Active Preview) -->
+<div class="w-44 bg-surface-container-lowest p-2.5 rounded shadow-sm flex flex-col justify-between shrink-0 select-none relative overflow-hidden" style="aspect-ratio: 62/20; min-height: 82px;">
+<div class="flex items-center justify-between leading-none">
+<span class="font-label-sm text-[8px] font-bold tracking-widest text-on-surface uppercase">PASALX</span>
+<span class="font-label-sm text-[7px] text-outline tracking-tight">KTM-01</span>
+</div>
+<div class="font-body-sm text-[10px] font-semibold text-on-surface leading-tight truncate mt-0.5">
+          Fit Me #128 Warm Nude
+        </div>
+<div class="flex items-center justify-between text-[8px] font-semibold text-on-surface-variant mt-0.5">
+<span>MRP: Rs. 1,350</span>
+<span>EXP: 05/2028</span>
+</div>
+<!-- Barcode 128 Strip Graphics -->
+<div class="mt-1 flex flex-col items-center">
+<svg class="w-full h-5" fill="currentColor" preserveAspectRatio="none" viewBox="0 0 140 24">
+<rect class="text-on-surface" height="24" width="3" x="0" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="5" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="9" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="15" y="0"></rect>
+<rect class="text-on-surface" height="24" width="6" x="19" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="27" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="31" y="0"></rect>
+<rect class="text-on-surface" height="24" width="5" x="36" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="43" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="47" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="53" y="0"></rect>
+<rect class="text-on-surface" height="24" width="6" x="58" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="66" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="70" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="76" y="0"></rect>
+<rect class="text-on-surface" height="24" width="5" x="80" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="87" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="92" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="98" y="0"></rect>
+<rect class="text-on-surface" height="24" width="6" x="102" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="110" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="115" y="0"></rect>
+<rect class="text-on-surface" height="24" width="5" x="119" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="126" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="131" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="135" y="0"></rect>
+</svg>
+<span class="font-label-sm text-[7.5px] tracking-widest text-on-surface font-mono mt-0.5">PRL-10024</span>
+</div>
+</div>
+<!-- Label Column 2 (Dual Twin) -->
+<div class="w-44 bg-surface-container-lowest p-2.5 rounded shadow-sm flex flex-col justify-between shrink-0 select-none relative overflow-hidden" style="aspect-ratio: 62/20; min-height: 82px;">
+<div class="flex items-center justify-between leading-none">
+<span class="font-label-sm text-[8px] font-bold tracking-widest text-on-surface uppercase">PASALX</span>
+<span class="font-label-sm text-[7px] text-outline tracking-tight">KTM-01</span>
+</div>
+<div class="font-body-sm text-[10px] font-semibold text-on-surface leading-tight truncate mt-0.5">
+          Fit Me #128 Warm Nude
+        </div>
+<div class="flex items-center justify-between text-[8px] font-semibold text-on-surface-variant mt-0.5">
+<span>MRP: Rs. 1,350</span>
+<span>EXP: 05/2028</span>
+</div>
+<div class="mt-1 flex flex-col items-center">
+<svg class="w-full h-5" fill="currentColor" preserveAspectRatio="none" viewBox="0 0 140 24">
+<rect class="text-on-surface" height="24" width="3" x="0" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="5" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="9" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="15" y="0"></rect>
+<rect class="text-on-surface" height="24" width="6" x="19" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="27" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="31" y="0"></rect>
+<rect class="text-on-surface" height="24" width="5" x="36" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="43" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="47" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="53" y="0"></rect>
+<rect class="text-on-surface" height="24" width="6" x="58" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="66" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="70" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="76" y="0"></rect>
+<rect class="text-on-surface" height="24" width="5" x="80" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="87" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="92" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="98" y="0"></rect>
+<rect class="text-on-surface" height="24" width="6" x="102" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="110" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="115" y="0"></rect>
+<rect class="text-on-surface" height="24" width="5" x="119" y="0"></rect>
+<rect class="text-on-surface" height="24" width="3" x="126" y="0"></rect>
+<rect class="text-on-surface" height="24" width="2" x="131" y="0"></rect>
+<rect class="text-on-surface" height="24" width="4" x="135" y="0"></rect>
+</svg>
+<span class="font-label-sm text-[7.5px] tracking-widest text-on-surface font-mono mt-0.5">PRL-10024</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Primary Interactive Actions -->
+<div class="flex flex-col gap-2.5">
+<button class="w-full bg-primary hover:bg-primary-container text-on-primary font-headline-sm text-headline-sm py-3.5 px-4 rounded-xl flex items-center justify-center gap-2.5 transition-colors shadow-sm active:scale-[0.99]" id="btn-print-batch" type="button">
+<span class="material-symbols-outlined text-[22px]">print</span>
+<span id="print-btn-label">Save Batch &amp; Print 24 Labels</span>
+</button>
+<button class="w-full bg-surface-container hover:bg-surface-container-high text-tertiary font-label-md text-label-md py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-[0.99]" id="btn-save-batch" type="button">
+<span class="material-symbols-outlined text-[18px]">save</span>
+<span>Save Inward Without Printing</span>
+</button>
+</div>
+<!-- Floating Toast Confirmation (Micro-interaction) -->
+<div class="fixed bottom-24 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface px-4 py-2.5 rounded-full flex items-center gap-2 shadow-lg opacity-0 pointer-events-none transition-all duration-300 z-50" id="toast-notify">
+<span class="material-symbols-outlined text-[18px] text-primary-fixed">check_circle</span>
+<span class="font-label-md text-label-md" id="toast-text">24 Barcode stickers sent to Xprinter</span>
+</div>
+</div>
+<script>
+  (function() {
+    const qtyInput = document.getElementById('input-qty');
+    const printBtnLabel = document.getElementById('print-btn-label');
+    const btnPrint = document.getElementById('btn-print-batch');
+    const btnSave = document.getElementById('btn-save-batch');
+    const toast = document.getElementById('toast-notify');
+    const toastText = document.getElementById('toast-text');
+    const pills = document.querySelectorAll('.category-pill');
+
+    // Dynamic qty label updater
+    if (qtyInput && printBtnLabel) {
+      qtyInput.addEventListener('input', function(e) {
+        const val = e.target.value || 0;
+        printBtnLabel.textContent = `Save Batch & Print ${val} Labels`;
+      });
+    }
+
+    // Category pills switcher styling
+    pills.forEach(pill => {
+      pill.addEventListener('click', function() {
+        pills.forEach(p => {
+          p.classList.remove('bg-primary', 'text-on-primary');
+          p.classList.add('bg-surface-container', 'text-on-surface-variant');
+        });
+        this.classList.remove('bg-surface-container', 'text-on-surface-variant');
+        this.classList.add('bg-primary', 'text-on-primary');
+      });
+    });
+
+    // Toast helper
+    function showToast(msg) {
+      if (!toast) return;
+      toastText.textContent = msg;
+      toast.classList.remove('opacity-0', 'pointer-events-none');
+      toast.classList.add('opacity-100');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0', 'pointer-events-none');
+      }, 2400);
+    }
+
+    if (btnPrint) {
+      btnPrint.addEventListener('click', function() {
+        const count = qtyInput ? qtyInput.value : 24;
+        showToast(`${count} Barcode labels dispatched (TCP:9100)`);
+      });
+    }
+
+    if (btnSave) {
+      btnSave.addEventListener('click', function() {
+        showToast('Batch registered into Khata ledger');
+      });
+    }
+  })();
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/90 backdrop-blur-xl shadow-[0_-1px_8px_rgba(0,0,0,0.04)]" data-active-classes="text-primary font-semibold"><div class="h-20 px-space-xs flex items-center justify-around"><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] flex-1 py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="home" href="#"><span class="material-symbols-outlined text-[22px]">home</span><span class="font-label-sm text-label-sm tracking-wide mt-1 uppercase">Home</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] flex-1 py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="history" href="#"><span class="material-symbols-outlined text-[22px]">receipt_long</span><span class="font-label-sm text-label-sm tracking-wide mt-1 uppercase">History</span></a><div class="flex items-center justify-center min-w-[44px] px-1"><a class="w-11 h-11 rounded-full bg-primary hover:bg-primary-container text-on-primary flex items-center justify-center shadow-md active:scale-[0.96] transition-all" data-path="new-sale" href="#" title="New Sale"><span class="material-symbols-outlined text-[22px]">add</span></a></div><a aria-current="page" class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] flex-1 py-1 transition-colors text-primary font-semibold" data-path="stock-intake" href="#"><span class="material-symbols-outlined text-[22px]">inventory_2</span><span class="font-label-sm text-label-sm tracking-wide mt-1 uppercase">Stock</span></a><a class="flex flex-col items-center justify-center min-w-[44px] min-h-[44px] flex-1 py-1 text-on-surface-variant hover:text-primary transition-colors" data-path="shift-close" href="#"><span class="material-symbols-outlined text-[22px]">schedule</span><span class="font-label-sm text-label-sm tracking-wide mt-1 uppercase">Shift</span></a></div></nav>
+
+
+
+
+
+</body></html>

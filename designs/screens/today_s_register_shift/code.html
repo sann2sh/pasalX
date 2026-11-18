@@ -1,0 +1,283 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><meta content="mobile_tab" name="shell-type"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"><link href="https://fonts.googleapis.com" rel="preconnect"><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-error-container": "#93000a", "surface-container": "#e8f0ea", "on-primary-container": "#b7eed4", "surface-container-lowest": "#ffffff", "surface-variant": "#dde4df", "on-primary-fixed-variant": "#1b503c", "tertiary-fixed-dim": "#bfc9c3", "on-secondary": "#ffffff", "on-secondary-container": "#456a5b", "on-surface-variant": "#404944", "primary-fixed": "#b8eed4", "on-tertiary-container": "#dbe5df", "on-surface": "#161d1a", "secondary-fixed-dim": "#a7cfbd", "surface": "#f4fbf6", "surface-container-high": "#e3eae5", "inverse-on-surface": "#ebf2ed", "primary-container": "#3b6e59", "on-background": "#161d1a", "on-primary": "#ffffff", "tertiary-container": "#5d6762", "on-tertiary": "#ffffff", "surface-dim": "#d4dcd7", "primary": "#215542", "tertiary-fixed": "#dbe5df", "on-tertiary-fixed-variant": "#3f4945", "outline": "#707974", "surface-container-highest": "#dde4df", "on-tertiary-fixed": "#151d1a", "surface-container-low": "#eef5f0", "surface-tint": "#356853", "on-secondary-fixed": "#002116", "surface-bright": "#f4fbf6", "inverse-surface": "#2b322f", "on-error": "#ffffff", "secondary-fixed": "#c3ecd9", "error": "#ba1a1a", "tertiary": "#454f4b", "inverse-primary": "#9cd2b9", "on-secondary-fixed-variant": "#294e40", "error-container": "#ffdad6", "secondary-container": "#c0e9d6", "outline-variant": "#c0c9c2", "primary-fixed-dim": "#9cd2b9", "background": "#f4fbf6", "secondary": "#416657", "on-primary-fixed": "#002115" }, "borderRadius": { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" }, "spacing": { "gutter": "1.5rem", "space-sm": "0.5rem", "gutter-mobile": "1rem", "space-lg": "1.5rem", "space-md": "1rem", "space-xs": "0.25rem", "margin": "3rem", "margin-mobile": "1.25rem", "space-xl": "2.5rem" }, "fontFamily": { "headline-lg-mobile": ["Plus Jakarta Sans"], "display-lg": ["Plus Jakarta Sans"], "body-sm": ["Plus Jakarta Sans"], "label-md": ["Inter"], "headline-lg": ["Plus Jakarta Sans"], "display-lg-mobile": ["Plus Jakarta Sans"], "label-sm": ["Inter"], "body-lg": ["Plus Jakarta Sans"], "body-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"] }, "fontSize": { "headline-lg-mobile": ["1.5rem", { "lineHeight": "2rem", "letterSpacing": "-0.015em", "fontWeight": "500" }], "display-lg": ["3.5rem", { "lineHeight": "4rem", "letterSpacing": "-0.03em", "fontWeight": "400" }], "body-sm": ["0.8125rem", { "lineHeight": "1.25rem", "letterSpacing": "0.01em", "fontWeight": "400" }], "label-md": ["0.75rem", { "lineHeight": "1rem", "letterSpacing": "0.08em", "fontWeight": "600" }], "headline-lg": ["2rem", { "lineHeight": "2.5rem", "letterSpacing": "-0.02em", "fontWeight": "500" }], "display-lg-mobile": ["2.25rem", { "lineHeight": "2.75rem", "letterSpacing": "-0.02em", "fontWeight": "400" }], "label-sm": ["0.6875rem", { "lineHeight": "0.875rem", "letterSpacing": "0.1em", "fontWeight": "500" }], "body-lg": ["1.125rem", { "lineHeight": "1.75rem", "letterSpacing": "-0.005em", "fontWeight": "400" }], "body-md": ["0.9375rem", { "lineHeight": "1.5rem", "letterSpacing": "0em", "fontWeight": "400" }], "headline-sm": ["1.25rem", { "lineHeight": "1.75rem", "letterSpacing": "-0.01em", "fontWeight": "600" }] } } } };</script><style>@layer base{html,body{width:100vw;margin:0;padding:0;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md border-b border-surface-container-high/60 pt-safe"><div class="flex items-center justify-between px-4 py-3"><div class="flex items-center gap-2"><h1 class="text-xl font-bold tracking-tight text-slate-900">Today's Shift</h1></div><div class="flex items-center gap-2"><button type="button" class="w-9 h-9 rounded-full bg-[#1a382b] text-white flex items-center justify-center shadow-sm hover:opacity-95 active:scale-95 transition-all" aria-label="Cashier Profile"><span class="material-symbols-outlined text-[18px]">person</span></button></div></div></header><main class="flex-1 flex flex-col relative w-full pt-16 pb-24 bg-surface"><div class="flex flex-col w-full px-margin-mobile py-space-md gap-space-lg">
+<!-- 1. Shift Status & Cashier Header Card -->
+<section class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-sm shadow-sm">
+
+<div class="flex items-end justify-between pt-space-xs">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Logged Cashier</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Sunita Shrestha</span>
+</div>
+<div class="flex flex-col items-end">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Opened</span>
+<span class="font-body-md text-body-md text-on-surface font-medium">08:30 AM</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-space-xs mt-space-xs bg-surface-container-lowest/80 rounded-lg p-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-secondary text-[18px]">payments</span>
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Opening Float</span>
+</div>
+<span class="font-body-lg text-body-lg text-on-surface font-semibold">Rs. 5,000</span>
+</div>
+</section>
+<!-- 3. Current Drawer Highlight Card (Core Focus) -->
+<section class="bg-primary text-on-primary rounded-xl p-space-lg shadow-md flex flex-col gap-space-md relative overflow-hidden">
+<div class="absolute -right-6 -bottom-6 w-32 h-32 rounded-full bg-on-primary-container/10 pointer-events-none"></div>
+<div class="flex flex-col gap-1">
+<div class="flex items-center justify-between">
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-primary-container">Register Cash Balance</span>
+<span class="material-symbols-outlined text-on-primary-container text-[20px]">account_balance_wallet</span>
+</div>
+<div class="flex items-baseline gap-1.5 pt-1">
+<span class="font-display-lg-mobile text-display-lg-mobile font-semibold tracking-tight text-on-primary">Rs. 32,200</span>
+</div>
+<span class="font-body-sm text-body-sm text-on-primary-container">Expected in Drawer</span>
+</div>
+<div class="bg-primary-container rounded-lg p-space-md flex flex-col gap-space-xs text-on-primary">
+<span class="font-label-sm text-label-sm text-on-primary-container uppercase tracking-wider">Drawer Math Formula</span>
+<div class="flex items-center justify-between font-body-sm text-body-sm pt-0.5">
+<span class="text-on-primary-container">Opening Float</span>
+<span class="font-medium">+ Rs. 5,000</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-primary-container">Cash Received (Sales)</span>
+<span class="font-medium">+ Rs. 28,450</span>
+</div>
+<div class="flex items-center justify-between font-body-sm text-body-sm">
+<span class="text-on-primary-container">Cash Paid (Expenses)</span>
+<span class="text-error-container font-medium">- Rs. 1,250</span>
+</div>
+<div class="flex items-center justify-between font-body-md text-body-md font-semibold pt-space-xs mt-space-xs bg-primary/40 -mx-space-md px-space-md py-1">
+<span>Actual Expected Till</span>
+<span>= Rs. 32,200</span>
+</div>
+</div>
+</section>
+<!-- 2. Core Financial Summary Cards Grid -->
+<section class="flex flex-col gap-space-sm">
+<div class="flex items-center justify-between px-space-xs">
+<span class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Revenue Breakdown</span>
+<span class="font-label-sm text-label-sm text-primary font-medium">32 Transactions</span>
+</div>
+<div class="grid grid-cols-2 gap-space-sm">
+<!-- Total Sales Card -->
+<div class="col-span-2 bg-surface-container-low rounded-xl p-space-md flex items-center justify-between shadow-sm">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Total Gross Sales</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-semibold pt-0.5">Rs. 48,250</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Combined Cash &amp; Digital</span>
+</div>
+<div class="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-[24px]">point_of_sale</span>
+</div>
+</div>
+<!-- Cash Sales -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Cash</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">attach_money</span>
+</div>
+<div class="flex flex-col pt-space-sm">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Rs. 28,450</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">59% of revenue</span>
+</div>
+</div>
+<!-- Digital / QR Sales -->
+<div class="bg-surface-container-low rounded-xl p-space-md flex flex-col justify-between shadow-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Fonepay QR</span>
+<span class="material-symbols-outlined text-secondary text-[18px]">qr_code_2</span>
+</div>
+<div class="flex flex-col pt-space-sm">
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Rs. 16,400</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">41% bank settlement</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Quick Expenses Logger & Simple List -->
+<section class="bg-surface-container-low rounded-xl p-space-md flex flex-col gap-space-md shadow-sm">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Today's Petty Cash Out</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Rs. 1,250 Total</span>
+</div>
+<button class="bg-secondary text-on-secondary px-space-md py-space-xs rounded-lg font-label-md text-label-md flex items-center gap-1 active:scale-95 transition-transform" id="open-expense-btn">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Log Expense</span>
+</button>
+</div>
+<!-- Expense Entries -->
+<div class="flex flex-col gap-space-xs">
+<div class="bg-surface-container-lowest rounded-lg p-space-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">local_cafe</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Staff Tea &amp; Snacks</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">11:15 AM • Sunita Shrestha</span>
+</div>
+</div>
+<span class="font-body-md text-body-md text-error font-semibold">- Rs. 250</span>
+</div>
+<div class="bg-surface-container-lowest rounded-lg p-space-sm flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Recycled Kraft Packaging Bags</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">01:45 PM • Sunita Shrestha</span>
+</div>
+</div>
+<span class="font-body-md text-body-md text-error font-semibold">- Rs. 1,000</span>
+</div>
+</div>
+</section>
+<!-- 5. End of Day Register Actions -->
+<section class="flex flex-col gap-space-sm pt-space-xs">
+<!-- Primary Closing Button -->
+<button class="w-full bg-primary text-on-primary py-space-md px-space-lg rounded-xl font-body-lg text-body-lg font-semibold flex items-center justify-center gap-space-xs shadow-md active:scale-[0.98] transition-transform" id="close-shift-btn">
+<span class="material-symbols-outlined text-[22px]">lock_reset</span>
+<span>Count Cash &amp; Close Shift</span>
+</button>
+<!-- Secondary Print Button -->
+<button class="w-full bg-surface-container text-on-surface py-space-sm px-space-md rounded-xl font-label-md text-label-md uppercase tracking-wider flex items-center justify-center gap-space-xs hover:bg-surface-container-high active:scale-[0.98] transition-all" id="print-summary-btn">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">print</span>
+<span>Print Mid-Day Shift Summary</span>
+</button>
+</section>
+<!-- Interactive Modal: Count Cash Drawer (Z-Report Pre-Check) -->
+<div class="hidden fixed inset-0 z-50 flex items-end justify-center p-margin-mobile bg-on-surface/40 backdrop-blur-sm" id="close-modal">
+<div class="bg-surface-container-lowest text-on-surface w-full max-w-md rounded-xl p-space-lg flex flex-col gap-space-md shadow-xl">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm uppercase tracking-wider text-on-surface-variant">Closing Reconciliation</span>
+<span class="font-headline-sm text-headline-sm text-on-surface">Physical Cash Tally</span>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant" id="dismiss-modal-btn">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="bg-surface-container-low p-space-md rounded-lg flex flex-col gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Target System Expected Cash</span>
+<span class="font-headline-lg-mobile text-headline-lg-mobile text-primary font-bold">Rs. 32,200</span>
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Counted Physical Cash (Rs.)</label>
+<div class="bg-surface-container rounded-lg p-space-sm flex items-center">
+<span class="font-body-lg text-body-lg text-on-surface-variant font-medium mr-2">Rs.</span>
+<input class="w-full bg-transparent font-headline-sm text-headline-sm text-on-surface focus:outline-none" id="cash-counted-input" placeholder="Enter counted amount" type="number" value="32200">
+</div>
+</div>
+<div class="flex flex-col gap-space-xs pt-space-xs">
+<button class="w-full bg-primary text-on-primary py-space-md rounded-lg font-body-md text-body-md font-semibold text-center shadow-sm active:scale-98" id="confirm-close-btn">
+          Complete Shift &amp; Print Z-Report
+        </button>
+<button class="w-full py-space-xs text-on-surface-variant font-label-md text-label-md text-center" id="cancel-close-btn">
+          Resume Shift
+        </button>
+</div>
+</div>
+</div>
+<!-- Interactive Expense Quick Sheet (Hidden by default) -->
+<div class="hidden fixed inset-0 z-50 flex items-end justify-center p-margin-mobile bg-on-surface/40 backdrop-blur-sm" id="expense-modal">
+<div class="bg-surface-container-lowest text-on-surface w-full max-w-md rounded-xl p-space-lg flex flex-col gap-space-md shadow-xl">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm text-on-surface">Record Cash Out</span>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant" id="dismiss-expense-btn">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="flex flex-col gap-space-sm">
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Reason / Item</label>
+<input class="w-full bg-surface-container-low rounded-lg p-space-sm font-body-md text-body-md text-on-surface focus:outline-none" placeholder="e.g. Courier charges, Milk" type="text">
+</div>
+<div class="flex flex-col gap-1">
+<label class="font-label-md text-label-md uppercase tracking-wider text-on-surface-variant">Amount (Rs.)</label>
+<input class="w-full bg-surface-container-low rounded-lg p-space-sm font-headline-sm text-headline-sm text-on-surface focus:outline-none" placeholder="0" type="number">
+</div>
+</div>
+<button class="w-full bg-primary text-on-primary py-space-md rounded-lg font-body-md text-body-md font-semibold active:scale-98" id="save-expense-btn">
+        Save &amp; Deduct From Drawer
+      </button>
+</div>
+</div>
+</div>
+<script>
+  // Simple Vanilla micro-interactions
+  const closeBtn = document.getElementById('close-shift-btn');
+  const closeModal = document.getElementById('close-modal');
+  const dismissModalBtn = document.getElementById('dismiss-modal-btn');
+  const cancelCloseBtn = document.getElementById('cancel-close-btn');
+  const confirmCloseBtn = document.getElementById('confirm-close-btn');
+
+  const openExpenseBtn = document.getElementById('open-expense-btn');
+  const expenseModal = document.getElementById('expense-modal');
+  const dismissExpenseBtn = document.getElementById('dismiss-expense-btn');
+  const saveExpenseBtn = document.getElementById('save-expense-btn');
+
+  const printSummaryBtn = document.getElementById('print-summary-btn');
+
+  function toggleModal(modal, show) {
+    if (show) {
+      modal.classList.remove('hidden');
+    } else {
+      modal.classList.add('hidden');
+    }
+  }
+
+  closeBtn?.addEventListener('click', () => toggleModal(closeModal, true));
+  dismissModalBtn?.addEventListener('click', () => toggleModal(closeModal, false));
+  cancelCloseBtn?.addEventListener('click', () => toggleModal(closeModal, false));
+
+  confirmCloseBtn?.addEventListener('click', () => {
+    confirmCloseBtn.textContent = 'Shift Closed & Printed ✓';
+    confirmCloseBtn.classList.add('bg-secondary');
+    setTimeout(() => {
+      toggleModal(closeModal, false);
+      confirmCloseBtn.textContent = 'Complete Shift & Print Z-Report';
+      confirmCloseBtn.classList.remove('bg-secondary');
+    }, 1200);
+  });
+
+  openExpenseBtn?.addEventListener('click', () => toggleModal(expenseModal, true));
+  dismissExpenseBtn?.addEventListener('click', () => toggleModal(expenseModal, false));
+  saveExpenseBtn?.addEventListener('click', () => {
+    saveExpenseBtn.textContent = 'Expense Logged ✓';
+    setTimeout(() => {
+      toggleModal(expenseModal, false);
+      saveExpenseBtn.textContent = 'Save & Deduct From Drawer';
+    }, 800);
+  });
+
+  printSummaryBtn?.addEventListener('click', () => {
+    const originalText = printSummaryBtn.innerHTML;
+    printSummaryBtn.innerHTML = '<span class="material-symbols-outlined text-[18px] animate-spin">refresh</span><span>Printing to receipt printer...</span>';
+    setTimeout(() => {
+      printSummaryBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">check</span><span>Mid-Day Summary Printed</span>';
+      setTimeout(() => {
+        printSummaryBtn.innerHTML = originalText;
+      }, 2000);
+    }, 1000);
+  });
+</script></main><nav class="fixed bottom-0 left-0 right-0 z-50 pb-safe bg-surface/85 backdrop-blur-xl shadow-[0_-1px_12px_rgba(0,0,0,0.03)]"><div class="flex justify-around items-center h-16 px-space-xs"><a class="flex flex-col items-center justify-center gap-0.5 min-w-[4rem] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="home" href="#"><span class="material-symbols-outlined text-[22px]">home</span><span class="font-label-sm text-label-sm tracking-wider uppercase">Home</span></a><a class="flex flex-col items-center justify-center gap-0.5 min-w-[4rem] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="history" href="#"><span class="material-symbols-outlined text-[22px]">receipt_long</span><span class="font-label-sm text-label-sm tracking-wider uppercase">History</span></a><div class="relative -top-3 flex flex-col items-center"><a aria-label="New Sale / Active Register" class="w-12 h-12 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-lg active:scale-95 transition-all" data-path="pos-terminal" href="#"><span class="material-symbols-outlined text-[26px]">add</span></a><span class="font-label-sm text-label-sm tracking-wider uppercase text-on-surface-variant mt-1">Sale</span></div><a class="flex flex-col items-center justify-center gap-0.5 min-w-[4rem] h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="stock-inventory" href="#"><span class="material-symbols-outlined text-[22px]">inventory_2</span><span class="font-label-sm text-label-sm tracking-wider uppercase">Stock</span></a><a aria-current="page" class="flex flex-col items-center justify-center gap-0.5 min-w-[4rem] h-12 text-primary font-semibold transition-colors" data-path="shift-summary" href="#"><span class="material-symbols-outlined text-[22px]">schedule</span><span class="font-label-sm text-label-sm tracking-wider uppercase text-primary font-semibold">Shift</span></a></div></nav>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</body></html>
