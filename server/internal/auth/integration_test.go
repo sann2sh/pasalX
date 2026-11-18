@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -91,10 +92,11 @@ func applyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 // ---------------------------------------------------------------- harness
 
 type harness struct {
-	t     *testing.T
-	svc   *Service
-	srv   *httptest.Server
-	clock atomic.Int64 // unix nanos; 0 => real time
+	t       *testing.T
+	svc     *Service
+	srv     *httptest.Server
+	storeID string
+	clock   atomic.Int64 // unix nanos; 0 => real time
 }
 
 var userSeq atomic.Int64
@@ -123,11 +125,25 @@ func (h *harness) travel(d time.Duration) { h.clock.Store(time.Now().Add(d).Unix
 
 func (h *harness) user(role, password, pin string) UserInfo {
 	h.t.Helper()
-	uname := fmt.Sprintf("%s_%d_%d", role, time.Now().UnixNano()%1e6, userSeq.Add(1))
-	u, err := h.svc.CreateUser(context.Background(), "Test "+role, uname, password, pin, role)
+	seq := userSeq.Add(1)
+	uname := fmt.Sprintf("%s_%d_%d", strings.ToLower(role), time.Now().UnixNano()%1e6, seq)
+	email := uname + "@test.local"
+	u, err := h.svc.CreateUser(context.Background(), "Test "+role, email, uname, password, pin)
 	if err != nil {
 		h.t.Fatalf("CreateUser: %v", err)
 	}
+	if role == RoleOwner && h.storeID == "" {
+		sid, err := h.svc.CreateStoreWithOwner(context.Background(), u.ID, "Store "+uname)
+		if err != nil {
+			h.t.Fatalf("CreateStoreWithOwner: %v", err)
+		}
+		h.storeID = sid
+	} else if h.storeID != "" {
+		if err := h.svc.AddStoreMember(context.Background(), h.storeID, u.ID, role); err != nil {
+			h.t.Fatalf("AddStoreMember: %v", err)
+		}
+	}
+	u.Role = role
 	return u
 }
 
@@ -569,7 +585,7 @@ func TestIntegration_LogoutDisableAndRoleChange(t *testing.T) {
 
 	// Role change invalidates existing session immediately.
 	lr = h.mustLogin(staff.Username, staffPw, "", dev.ID)
-	testPool.Exec(ctx, `UPDATE users SET role='MANAGER' WHERE id=$1`, staff.ID)
+	testPool.Exec(ctx, `UPDATE store_memberships SET role='MANAGER' WHERE user_id=$1 AND store_id=$2`, staff.ID, h.storeID)
 	h.expect(h.do("GET", "/api/auth/heartbeat", lr.AccessToken, nil), http.StatusUnauthorized, CodeSessionEnded)
 
 	// Terminated staff: disabled account loses access immediately and cannot log back in.

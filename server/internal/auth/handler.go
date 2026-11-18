@@ -41,6 +41,7 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.Handle("POST /api/auth/logout", h.RequireAuth(http.HandlerFunc(h.logout)))
 	mux.Handle("POST /api/auth/revoke", h.RequireAuth(RequireRole(RoleOwner)(http.HandlerFunc(h.revoke))))
 	mux.Handle("GET /api/auth/heartbeat", h.RequireAuth(http.HandlerFunc(h.heartbeat)))
+	h.registerPhase2Routes(mux)
 }
 
 // RequireAuth is the kill-switch middleware reused by every protected route
@@ -103,7 +104,8 @@ func (h *Handler) registerDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listDevices(w http.ResponseWriter, r *http.Request) {
-	devices, err := h.svc.ListDevices(r.Context())
+	sess, _ := SessionFrom(r.Context())
+	devices, err := h.svc.ListDevices(r.Context(), sess)
 	if err != nil {
 		writeError(w, err)
 		return

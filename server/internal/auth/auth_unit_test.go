@@ -231,7 +231,7 @@ func TestLeaseEnvelope_TamperAndBindingRejected(t *testing.T) {
 // ---------------------------------------------------------------- jwt
 
 func testSession(exp time.Time) Session {
-	return Session{UserID: "u1", Role: RoleStaff, DeviceID: "d1", DeviceCode: "01", LeaseID: "l1", ExpiresAt: exp}
+	return Session{UserID: "u1", StoreID: "s1", Role: RoleStaff, DeviceID: "d1", DeviceCode: "01", LeaseID: "l1", TokenVersion: 1, ExpiresAt: exp}
 }
 
 func TestJWT_RoundTripAndExpiry(t *testing.T) {
@@ -267,8 +267,8 @@ func TestJWT_RejectsForgeries(t *testing.T) {
 		t.Error("tampered payload accepted")
 	}
 
-	claims := Claims{Role: RoleOwner, DeviceID: "d1", LeaseID: "l1", RegisteredClaims: jwt.RegisteredClaims{
-		Issuer: jwtIssuer, Subject: "attacker", Audience: jwt.ClaimStrings{jwtAudience},
+	claims := Claims{StoreID: "s1", Role: RoleOwner, DeviceID: "d1", LeaseID: "l1", TokenVersion: 1, RegisteredClaims: jwt.RegisteredClaims{
+		Issuer: jwtIssuer, Subject: "attacker", Audience: jwt.ClaimStrings{jwtDeviceAudience},
 		IssuedAt: jwt.NewNumericDate(now), ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
 	}}
 	none, _ := jwt.NewWithClaims(jwt.SigningMethodNone, claims).SignedString(jwt.UnsafeAllowNoneSignatureType)

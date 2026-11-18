@@ -20,16 +20,18 @@ import (
 const MasterKeyEnv = "PASALX_MASTER_KEY"
 
 const (
-	infoDEKAtRest = "pasalx/dek-at-rest/v1"
-	infoKEKRoot   = "pasalx/kek-lease-root/v1"
-	infoJWT       = "pasalx/jwt-hs256/v1"
+	infoDEKAtRest  = "pasalx/dek-at-rest/v1"
+	infoKEKRoot    = "pasalx/kek-lease-root/v1"
+	infoJWT        = "pasalx/jwt-hs256/v1"
+	infoAccountJWT = "pasalx/jwt-account/v1"
 )
 
 // Keys holds the derived 256-bit subkeys. It never exposes the master key.
 type Keys struct {
-	dekAtRest []byte // seals per-device DEKs stored in Postgres
-	kekRoot   []byte // root for per-lease KEK derivation
-	jwt       []byte // HS256 signing key
+	dekAtRest  []byte // seals per-device DEKs stored in Postgres
+	kekRoot    []byte // root for per-lease KEK derivation
+	jwt        []byte // HS256 signing key for device tokens
+	accountJWT []byte // HS256 signing key for account tokens (distinct domain)
 }
 
 // NewKeys derives all subkeys from a 32-byte (or longer) master secret.
@@ -49,6 +51,9 @@ func NewKeys(master []byte) (*Keys, error) {
 		return nil, err
 	}
 	if k.jwt, err = derive(infoJWT); err != nil {
+		return nil, err
+	}
+	if k.accountJWT, err = derive(infoAccountJWT); err != nil {
 		return nil, err
 	}
 	return k, nil

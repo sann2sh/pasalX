@@ -65,6 +65,59 @@ func ValidatePIN(pin string) error {
 	return nil
 }
 
+var commonWeakPasswords = map[string]struct{}{
+	"password123": {}, "password1234": {}, "1234567890": {}, "12345678901": {},
+	"123456789012": {}, "qwertyuiop": {}, "qwerty12345": {}, "admin12345": {},
+	"letmein123": {}, "welcome123": {}, "iloveyou123": {}, "pasalx1234": {},
+	"abcdefghij": {}, "0000000000": {}, "1111111111": {},
+}
+
+// ValidateSignupPassword enforces the public signup/reset password policy:
+// 10-128 chars, not in common breached passwords, and not containing username
+// or email local-part.
+func ValidateSignupPassword(pw, username, email string) error {
+	if n := len(pw); n < 10 || n > 128 {
+		return errors.New("password must be 10-128 characters")
+	}
+	lower := strings.ToLower(pw)
+	if _, weak := commonWeakPasswords[lower]; weak {
+		return errors.New("password is too common; choose a stronger password")
+	}
+	if u := strings.ToLower(strings.TrimSpace(username)); len(u) >= 3 && strings.Contains(lower, u) {
+		return errors.New("password must not contain your username")
+	}
+	if at := strings.IndexByte(email, '@'); at > 2 {
+		local := strings.ToLower(strings.TrimSpace(email[:at]))
+		if len(local) >= 3 && strings.Contains(lower, local) {
+			return errors.New("password must not contain your email address")
+		}
+	}
+	return nil
+}
+
+// ValidateSignupPIN enforces 6 digits and rejects trivial/predictable PINs
+// (all identical digits, sequential ascending/descending, or repeating pairs/triples).
+func ValidateSignupPIN(pin string) error {
+	if err := ValidatePIN(pin); err != nil {
+		return err
+	}
+	allSame := true
+	for i := 1; i < len(pin); i++ {
+		if pin[i] != pin[0] {
+			allSame = false
+			break
+		}
+	}
+	if allSame {
+		return errors.New("PIN is too simple (all digits identical)")
+	}
+	switch pin {
+	case "123456", "654321", "012345", "543210", "234567", "765432", "345678", "876543", "456789", "987654", "121212", "123123", "112233", "000111", "111000":
+		return errors.New("PIN is too predictable; choose another 6-digit PIN")
+	}
+	return nil
+}
+
 // HashSecret returns a PHC-formatted Argon2id hash:
 // $argon2id$v=19$m=19456,t=2,p=1$<salt b64>$<hash b64>
 func HashSecret(secret string) (string, error) {

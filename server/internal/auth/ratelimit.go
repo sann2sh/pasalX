@@ -210,3 +210,64 @@ func (l *failureLimiter) ensureCapacity() {
 		delete(l.entries, oldestKey)
 	}
 }
+
+// rateLimiter is a bounded sliding-window request rate limiter used for
+// per-IP, per-account, and global endpoint caps (e.g. signup, invite accept).
+type rateLimiter struct {
+	mu       sync.Mutex
+	max      int
+	window   time.Duration
+	entries  map[string][]time.Time
+	lastGC   time.Time
+	maxItems int
+}
+
+func newRateLimiter(max int, window time.Duration) *rateLimiter {
+	return &rateLimiter{
+		max:      max,
+		window:   window,
+		entries:  make(map[string][]time.Time),
+		maxItems: 10000,
+	}
+}
+
+// Allow checks if key is within limit at now; if allowed, records the hit and
+// returns (true, 0). Otherwise returns (false, retryAfter).
+func (r *rateLimiter) Allow(key string, now time.Time) (bool, time.Duration) {
+	cutoff := now.Add(-r.window)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.lastGC.IsZero() || now.Sub(r.lastGC) >= time.Minute {
+		r.lastGC = now
+		for k, ts := range r.entries {
+			if len(ts) == 0 || !ts[len(ts)-1].After(cutoff) {
+				delete(r.entries, k)
+			}
+		}
+	}
+
+	ts := r.entries[key]
+	kept := ts[:0]
+	for _, t := range ts {
+		if t.After(cutoff) {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) >= r.max {
+		r.entries[key] = kept
+		wait := kept[0].Add(r.window).Sub(now)
+		if wait < time.Second {
+			wait = time.Second
+		}
+		return false, wait
+	}
+	if len(kept) == 0 && len(r.entries) >= r.maxItems {
+		for k := range r.entries {
+			delete(r.entries, k)
+			break
+		}
+	}
+	r.entries[key] = append(kept, now)
+	return true, 0
+}
