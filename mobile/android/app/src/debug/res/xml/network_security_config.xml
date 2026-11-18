@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Debug-only: allow cleartext HTTP to LAN dev servers (e.g. 192.168.x.x / 10.0.2.2).
+         Release builds exclude src/debug and enforce usesCleartextTraffic="false". -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+

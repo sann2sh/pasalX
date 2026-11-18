@@ -8,6 +8,10 @@
 .env*
 *.pem
 *.key
+*.jks
+*.keystore
+key.properties
+*.apk
 
 # Go Server Build Artifacts
 server/api
