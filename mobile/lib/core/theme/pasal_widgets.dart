@@ -3,6 +3,8 @@ import 'app_spacing.dart';
 import 'app_theme.dart';
 import 'app_typography.dart';
 
+export 'pasal_alert.dart';
+
 /// Tactile press wrapper applying Emil Kowalski's responsive `scale(0.97)`
 /// press state with a fast strong ease-out curve.
 class PasalPressable extends StatefulWidget {
@@ -160,12 +162,16 @@ class PasalStatusBadge extends StatelessWidget {
             Icon(icon, size: 13, color: fg),
             const SizedBox(width: 4),
           ],
-          Text(
-            label.toUpperCase(),
-            style: context.textTheme.labelSmall?.copyWith(
-              color: fg,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.7,
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.textTheme.labelSmall?.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.7,
+              ),
             ),
           ),
         ],

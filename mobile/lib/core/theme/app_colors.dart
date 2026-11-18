@@ -10,6 +10,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
     required this.primaryContainer,
     required this.onPrimaryContainer,
     required this.primaryFixed,
+    required this.onPrimaryFixed,
     required this.primaryFixedDim,
     required this.secondary,
     required this.onSecondary,
@@ -36,6 +37,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
     required this.onErrorContainer,
     required this.warning,
     required this.warningContainer,
+    required this.warningBorder,
     required this.onWarningContainer,
   });
 
@@ -44,6 +46,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
   final Color primaryContainer;
   final Color onPrimaryContainer;
   final Color primaryFixed;
+  final Color onPrimaryFixed;
   final Color primaryFixedDim;
   final Color secondary;
   final Color onSecondary;
@@ -70,6 +73,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
   final Color onErrorContainer;
   final Color warning;
   final Color warningContainer;
+  final Color warningBorder;
   final Color onWarningContainer;
 
   /// Canonical Nordic Botanical light palette.
@@ -79,6 +83,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
     primaryContainer: Color(0xFF3B6E59),
     onPrimaryContainer: Color(0xFFB7EED4),
     primaryFixed: Color(0xFFB8EED4),
+    onPrimaryFixed: Color(0xFF002115),
     primaryFixedDim: Color(0xFF9CD2B9),
     secondary: Color(0xFF416657),
     onSecondary: Color(0xFFFFFFFF),
@@ -105,6 +110,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
     onErrorContainer: Color(0xFF93000A),
     warning: Color(0xFFB45309),
     warningContainer: Color(0xFFFEF3C7),
+    warningBorder: Color(0xFFF59E0B),
     onWarningContainer: Color(0xFF78350F),
   );
 
@@ -118,6 +124,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
     Color? primaryContainer,
     Color? onPrimaryContainer,
     Color? primaryFixed,
+    Color? onPrimaryFixed,
     Color? primaryFixedDim,
     Color? secondary,
     Color? onSecondary,
@@ -144,6 +151,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
     Color? onErrorContainer,
     Color? warning,
     Color? warningContainer,
+    Color? warningBorder,
     Color? onWarningContainer,
   }) {
     return PasalColors(
@@ -152,6 +160,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
       primaryContainer: primaryContainer ?? this.primaryContainer,
       onPrimaryContainer: onPrimaryContainer ?? this.onPrimaryContainer,
       primaryFixed: primaryFixed ?? this.primaryFixed,
+      onPrimaryFixed: onPrimaryFixed ?? this.onPrimaryFixed,
       primaryFixedDim: primaryFixedDim ?? this.primaryFixedDim,
       secondary: secondary ?? this.secondary,
       onSecondary: onSecondary ?? this.onSecondary,
@@ -180,6 +189,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
       onErrorContainer: onErrorContainer ?? this.onErrorContainer,
       warning: warning ?? this.warning,
       warningContainer: warningContainer ?? this.warningContainer,
+      warningBorder: warningBorder ?? this.warningBorder,
       onWarningContainer: onWarningContainer ?? this.onWarningContainer,
     );
   }
@@ -194,6 +204,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
       onPrimaryContainer:
           Color.lerp(onPrimaryContainer, other.onPrimaryContainer, t)!,
       primaryFixed: Color.lerp(primaryFixed, other.primaryFixed, t)!,
+      onPrimaryFixed: Color.lerp(onPrimaryFixed, other.onPrimaryFixed, t)!,
       primaryFixedDim: Color.lerp(primaryFixedDim, other.primaryFixedDim, t)!,
       secondary: Color.lerp(secondary, other.secondary, t)!,
       onSecondary: Color.lerp(onSecondary, other.onSecondary, t)!,
@@ -226,6 +237,7 @@ class PasalColors extends ThemeExtension<PasalColors> {
       onErrorContainer: Color.lerp(onErrorContainer, other.onErrorContainer, t)!,
       warning: Color.lerp(warning, other.warning, t)!,
       warningContainer: Color.lerp(warningContainer, other.warningContainer, t)!,
+      warningBorder: Color.lerp(warningBorder, other.warningBorder, t)!,
       onWarningContainer:
           Color.lerp(onWarningContainer, other.onWarningContainer, t)!,
     );

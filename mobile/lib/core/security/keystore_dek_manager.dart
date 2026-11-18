@@ -363,13 +363,20 @@ class KeystoreDekManager {
     return Uint8List.fromList(base64Decode(encoded));
   }
 
+  /// Destroys offline Keystore recovery slots without touching active RAM DEK.
+  /// Called when signing in via password-only auth so no stale prior-staff
+  /// PIN recovery slot lingers on a shared terminal.
+  Future<void> clearOfflineSlot() async {
+    await _store.delete(_slotKey);
+    await _store.delete(_envelopeKey);
+    await _store.delete(_attemptsKey);
+  }
+
   /// Destroys all Keystore recovery material AND zeroes volatile RAM DEK.
   /// Called on logout, lease expiry, or Kill-Switch (`DEVICE_REVOKED`).
   Future<void> wipeAll() async {
     _ramKeyHolder.wipe();
-    await _store.delete(_slotKey);
-    await _store.delete(_envelopeKey);
-    await _store.delete(_attemptsKey);
+    await clearOfflineSlot();
   }
 
   /// Returns validated attempt count in `[0, maxOfflinePinAttempts]`, or `null`

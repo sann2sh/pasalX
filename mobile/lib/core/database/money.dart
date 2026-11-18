@@ -3,6 +3,9 @@ import 'package:intl/intl.dart';
 /// Fixed-point paisa (1 NPR = 100 paisa) arithmetic & formatting utilities
 /// matching Go's `sync.Money` (`int64` paisa/cents) to avoid floating-point drift.
 abstract final class MoneyUtils {
+  /// Maximum paisa fitting SQL `DECIMAL(10,2)` (`99,999,999.99`).
+  static const int maxDecimal10_2Paisa = 9999999999;
+
   /// Maximum paisa fitting SQL `DECIMAL(12,2)` (`9,999,999,999.99`).
   static const int maxDecimal12_2Paisa = 999999999999;
 
@@ -68,6 +71,18 @@ abstract final class MoneyUtils {
   static int? parseNullableToPaisa(Object? raw) {
     if (raw == null) return null;
     return parseToPaisa(raw);
+  }
+
+  /// Safely parses user-entered decimal rupees string to paisa, returning null
+  /// on empty or malformed input.
+  static int? tryParseToPaisa(String? raw) {
+    final trimmed = raw?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    try {
+      return parseToPaisa(trimmed);
+    } on FormatException {
+      return null;
+    }
   }
 }
 

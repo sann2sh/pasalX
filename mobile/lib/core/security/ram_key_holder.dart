@@ -47,6 +47,9 @@ class RamKeyHolder extends ChangeNotifier {
   bool _disposed = false;
   bool _scheduledNotify = false;
 
+  /// Whether this [RamKeyHolder] has been disposed.
+  bool get isDisposed => _disposed;
+
   /// Registers a callback invoked immediately whenever the RAM key is wiped
   /// or this holder is disposed (even during ProviderScope teardown).
   void addLockListener(VoidCallback listener) {

@@ -5,9 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'core/providers/foundation_providers.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/pasal_alert.dart';
 
 /// Root PasalX Mobile Application widget wired with Nordic Botanical theme tokens,
-/// lifecycle lease enforcement on OS sleep resume, and `go_router` 4-tab navigation.
+/// lifecycle lease enforcement on OS sleep resume, subtle alert overlays, and `go_router` 5-tab navigation.
 class PasalXApp extends ConsumerStatefulWidget {
   const PasalXApp({
     super.key,
@@ -50,6 +51,9 @@ class _PasalXAppState extends ConsumerState<PasalXApp> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: router,
+      builder: (context, child) => PasalAlertOverlay(
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }
