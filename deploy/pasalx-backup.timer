@@ -1,0 +1,11 @@
+[Unit]
+Description=Run PasalX Encrypted PostgreSQL Backup nightly at 02:30 UTC
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+Persistent=true
+RandomizedDelaySec=5m
+
+[Install]
+WantedBy=timers.target
+

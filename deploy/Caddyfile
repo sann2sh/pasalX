@@ -1,0 +1,41 @@
+{
+	email admin@skisub.com
+}
+
+pasalx.skisub.com {
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# SSE stream: disable response buffering so events flush immediately
+	@sse path /api/sync/events
+	handle @sse {
+		reverse_proxy 127.0.0.1:8080 {
+			flush_interval -1
+			transport http {
+				read_timeout 0
+			}
+		}
+	}
+
+	handle {
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	log {
+		output file /var/log/caddy/pasalx-access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+}
+

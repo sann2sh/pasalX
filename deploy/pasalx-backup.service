@@ -1,0 +1,12 @@
+[Unit]
+Description=PasalX Encrypted PostgreSQL Backup
+After=postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/pasalx/bin/pasalx-backup.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pasalx-backup
+

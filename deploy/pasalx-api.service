@@ -1,0 +1,34 @@
+[Unit]
+Description=PasalX Go API Server
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=pasalx
+Group=pasalx
+EnvironmentFile=/etc/pasalx/pasalx.env
+ExecStart=/opt/pasalx/current/pasalx-api
+Restart=on-failure
+RestartSec=3s
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=256M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pasalx-api
+
+[Install]
+WantedBy=multi-user.target
+
