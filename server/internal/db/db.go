@@ -14,6 +14,9 @@ import (
 func ConnectPool(ctx context.Context) (*pgxpool.Pool, error) {
 	connStr := os.Getenv("DATABASE_URL")
 	if connStr == "" {
+		if os.Getenv("PASALX_ENV") == "production" {
+			return nil, fmt.Errorf("DATABASE_URL is required when PASALX_ENV=production")
+		}
 		host := os.Getenv("DB_HOST")
 		if host == "" {
 			host = "localhost"

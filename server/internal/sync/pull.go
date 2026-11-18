@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"pasalx/server/internal/auth"
+	"pasalx/server/internal/db"
 )
 
 const (
@@ -43,16 +44,6 @@ func (s *Service) Pull(ctx context.Context, sess auth.Session, since time.Time, 
 		}, nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel:   pgx.RepeatableRead,
-		AccessMode: pgx.ReadOnly,
-	})
-	if err != nil {
-		log.Printf("sync: begin pull tx failed: %v", err)
-		return nil, errInternal
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
 	changes := newEmptyPullChanges()
 	hasMore := false
 	nextCursor := cutoff
@@ -65,139 +56,159 @@ func (s *Service) Pull(ctx context.Context, sess auth.Session, since time.Time, 
 		}
 	}
 
-	var tEnd time.Time
-	var trunc bool
+	err := db.WithTenantTxOptions(ctx, s.db, sess.StoreID, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	}, func(tx pgx.Tx) error {
+		var (
+			tEnd  time.Time
+			trunc bool
+			qErr  error
+		)
 
-	if changes.Products, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]ProductRecord, time.Time, bool, error) {
-		return pullProducts(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
+		if changes.Stores, qErr = pullStores(ctx, tx, sess.StoreID, since, cutoff); qErr != nil {
+			return qErr
+		}
 
-	if changes.ProductVariants, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]ProductVariantRecord, time.Time, bool, error) {
-		return pullVariants(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	if changes.Batches, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]BatchRecord, time.Time, bool, error) {
-		return pullBatches(ctx, tx, sess.Role, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	if changes.Customers, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]CustomerRecord, time.Time, bool, error) {
-		return pullCustomers(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	if changes.CustomerShadeProfiles, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]CustomerShadeProfileRecord, time.Time, bool, error) {
-		return pullCustomerShadeProfiles(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	if changes.CustomerTransactions, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]CustomerTransactionRecord, time.Time, bool, error) {
-		return pullCustomerTransactions(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	// Supplier ledger & cost/audit visibility strictly follows RBAC (§7.5):
-	// STAFF receives empty slices and zero DB queries are run for these tables.
-	if sess.Role == auth.RoleOwner || sess.Role == auth.RoleManager {
-		if changes.Suppliers, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]SupplierRecord, time.Time, bool, error) {
-			return pullSuppliers(ctx, tx, since, c, l)
-		}); err != nil {
-			return nil, pullDBErr(err)
+		if changes.StoreMembers, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]StoreMemberRecord, time.Time, bool, error) {
+			return pullStoreMembers(ctx, tx, sess.StoreID, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
 		updateCursor(tEnd, trunc)
 
-		if changes.PurchaseInvoices, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]PurchaseInvoiceRecord, time.Time, bool, error) {
-			return pullPurchaseInvoices(ctx, tx, since, c, l)
-		}); err != nil {
-			return nil, pullDBErr(err)
+		if changes.Products, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]ProductRecord, time.Time, bool, error) {
+			return pullProducts(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
 		updateCursor(tEnd, trunc)
 
-		if changes.PurchaseInvoiceItems, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]PurchaseInvoiceItemRecord, time.Time, bool, error) {
-			return pullPurchaseInvoiceItems(ctx, tx, sess.Role, since, c, l)
-		}); err != nil {
-			return nil, pullDBErr(err)
+		if changes.ProductVariants, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]ProductVariantRecord, time.Time, bool, error) {
+			return pullVariants(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
 		updateCursor(tEnd, trunc)
 
-		if changes.SupplierPayments, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]SupplierPaymentRecord, time.Time, bool, error) {
-			return pullSupplierPayments(ctx, tx, since, c, l)
-		}); err != nil {
-			return nil, pullDBErr(err)
+		if changes.Batches, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]BatchRecord, time.Time, bool, error) {
+			return pullBatches(ctx, tx, sess.Role, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
 		updateCursor(tEnd, trunc)
 
-		if changes.InventorySyncAudit, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]InventorySyncAuditRecord, time.Time, bool, error) {
-			return pullInventorySyncAudit(ctx, tx, since, c, l)
-		}); err != nil {
-			return nil, pullDBErr(err)
+		if changes.Customers, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]CustomerRecord, time.Time, bool, error) {
+			return pullCustomers(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
 		updateCursor(tEnd, trunc)
-	}
 
-	if changes.StockMovements, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]StockMovementRecord, time.Time, bool, error) {
-		return pullStockMovements(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	if changes.SaleOrders, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]SaleOrderRecord, time.Time, bool, error) {
-		return pullSaleOrders(ctx, tx, sess.Role, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
-
-	if len(changes.SaleOrders) > 0 {
-		orderIDs := make([]string, len(changes.SaleOrders))
-		for i, o := range changes.SaleOrders {
-			orderIDs[i] = o.ID
+		if changes.CustomerShadeProfiles, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]CustomerShadeProfileRecord, time.Time, bool, error) {
+			return pullCustomerShadeProfiles(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
-		if changes.SaleItems, err = pullSaleItems(ctx, tx, sess.Role, orderIDs); err != nil {
-			return nil, pullDBErr(err)
+		updateCursor(tEnd, trunc)
+
+		if changes.CustomerTransactions, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]CustomerTransactionRecord, time.Time, bool, error) {
+			return pullCustomerTransactions(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
 		}
-		if changes.SalePayments, err = pullSalePayments(ctx, tx, orderIDs); err != nil {
-			return nil, pullDBErr(err)
+		updateCursor(tEnd, trunc)
+
+		// Supplier ledger & cost/audit visibility strictly follows RBAC (§7.5):
+		// STAFF receives empty slices and zero DB queries are run for these tables.
+		if sess.Role == auth.RoleOwner || sess.Role == auth.RoleManager {
+			if changes.Suppliers, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]SupplierRecord, time.Time, bool, error) {
+				return pullSuppliers(ctx, tx, since, c, l)
+			}); qErr != nil {
+				return qErr
+			}
+			updateCursor(tEnd, trunc)
+
+			if changes.PurchaseInvoices, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]PurchaseInvoiceRecord, time.Time, bool, error) {
+				return pullPurchaseInvoices(ctx, tx, since, c, l)
+			}); qErr != nil {
+				return qErr
+			}
+			updateCursor(tEnd, trunc)
+
+			if changes.PurchaseInvoiceItems, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]PurchaseInvoiceItemRecord, time.Time, bool, error) {
+				return pullPurchaseInvoiceItems(ctx, tx, sess.Role, since, c, l)
+			}); qErr != nil {
+				return qErr
+			}
+			updateCursor(tEnd, trunc)
+
+			if changes.SupplierPayments, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]SupplierPaymentRecord, time.Time, bool, error) {
+				return pullSupplierPayments(ctx, tx, since, c, l)
+			}); qErr != nil {
+				return qErr
+			}
+			updateCursor(tEnd, trunc)
+
+			if changes.InventorySyncAudit, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]InventorySyncAuditRecord, time.Time, bool, error) {
+				return pullInventorySyncAudit(ctx, tx, since, c, l)
+			}); qErr != nil {
+				return qErr
+			}
+			updateCursor(tEnd, trunc)
 		}
-	}
 
-	if changes.RegisterShifts, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]RegisterShiftRecord, time.Time, bool, error) {
-		return pullRegisterShifts(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
+		if changes.StockMovements, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]StockMovementRecord, time.Time, bool, error) {
+			return pullStockMovements(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
+		}
+		updateCursor(tEnd, trunc)
 
-	if changes.StaffShiftSessions, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]StaffShiftSessionRecord, time.Time, bool, error) {
-		return pullStaffShiftSessions(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
+		if changes.SaleOrders, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]SaleOrderRecord, time.Time, bool, error) {
+			return pullSaleOrders(ctx, tx, sess.Role, since, c, l)
+		}); qErr != nil {
+			return qErr
+		}
+		updateCursor(tEnd, trunc)
 
-	if changes.Expenses, tEnd, trunc, err = pullTable(cutoff, limit, func(c time.Time, l int) ([]ExpenseRecord, time.Time, bool, error) {
-		return pullExpenses(ctx, tx, since, c, l)
-	}); err != nil {
-		return nil, pullDBErr(err)
-	}
-	updateCursor(tEnd, trunc)
+		if len(changes.SaleOrders) > 0 {
+			orderIDs := make([]string, len(changes.SaleOrders))
+			for i, o := range changes.SaleOrders {
+				orderIDs[i] = o.ID
+			}
+			if changes.SaleItems, qErr = pullSaleItems(ctx, tx, sess.Role, orderIDs); qErr != nil {
+				return qErr
+			}
+			if changes.SalePayments, qErr = pullSalePayments(ctx, tx, orderIDs); qErr != nil {
+				return qErr
+			}
+		}
 
-	if err := tx.Commit(ctx); err != nil {
+		if changes.RegisterShifts, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]RegisterShiftRecord, time.Time, bool, error) {
+			return pullRegisterShifts(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
+		}
+		updateCursor(tEnd, trunc)
+
+		if changes.StaffShiftSessions, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]StaffShiftSessionRecord, time.Time, bool, error) {
+			return pullStaffShiftSessions(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
+		}
+		updateCursor(tEnd, trunc)
+
+		if changes.Expenses, tEnd, trunc, qErr = pullTable(cutoff, limit, func(c time.Time, l int) ([]ExpenseRecord, time.Time, bool, error) {
+			return pullExpenses(ctx, tx, since, c, l)
+		}); qErr != nil {
+			return qErr
+		}
+		updateCursor(tEnd, trunc)
+
+		return nil
+	})
+	if err != nil {
 		return nil, pullDBErr(err)
 	}
 	if !nextCursor.After(since) {
@@ -251,6 +262,56 @@ func trimByUpdatedAt[T any](rows []T, limit int, getTS func(T) time.Time) ([]T, 
 		return rows[:end], getTS(rows[end-1]), true
 	}
 	return rows[:limit], boundary, true
+}
+
+func pullStores(ctx context.Context, tx pgx.Tx, storeID string, since, cutoff time.Time) ([]StoreProfileRecord, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT id, name, pan_number, phone, address, status, updated_at
+		FROM stores
+		WHERE id = $1 AND updated_at > $2 AND updated_at <= $3`,
+		storeID, since, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]StoreProfileRecord, 0, 1)
+	for rows.Next() {
+		var r StoreProfileRecord
+		if err := rows.Scan(&r.ID, &r.Name, &r.PanNumber, &r.Phone, &r.Address, &r.Status, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func pullStoreMembers(ctx context.Context, tx pgx.Tx, storeID string, since, cutoff time.Time, limit int) ([]StoreMemberRecord, time.Time, bool, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT m.id, m.user_id, u.name, u.username, m.role, m.status, m.updated_at
+		FROM store_memberships m
+		JOIN users u ON u.id = m.user_id
+		WHERE m.store_id = $1 AND m.updated_at > $2 AND m.updated_at <= $3
+		ORDER BY m.updated_at ASC, m.id ASC
+		LIMIT $4`, storeID, since, cutoff, limit+1)
+	if err != nil {
+		return nil, time.Time{}, false, err
+	}
+	defer rows.Close()
+
+	out := make([]StoreMemberRecord, 0, 8)
+	for rows.Next() {
+		var r StoreMemberRecord
+		if err := rows.Scan(&r.ID, &r.UserID, &r.Name, &r.Username, &r.Role, &r.Status, &r.UpdatedAt); err != nil {
+			return nil, time.Time{}, false, err
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, time.Time{}, false, err
+	}
+	trimmed, end, trunc := trimByUpdatedAt(out, limit, func(r StoreMemberRecord) time.Time { return *r.UpdatedAt })
+	return trimmed, end, trunc, nil
 }
 
 func pullProducts(ctx context.Context, tx pgx.Tx, since, cutoff time.Time, limit int) ([]ProductRecord, time.Time, bool, error) {

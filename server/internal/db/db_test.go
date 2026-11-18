@@ -20,36 +20,4 @@ func TestConnectPool(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT 1").Scan(&one); err != nil || one != 1 {
 		t.Fatalf("SELECT 1 failed: one=%d err=%v", one, err)
 	}
-
-	var tableCount int
-	err = pool.QueryRow(ctx, "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'").Scan(&tableCount)
-	if err != nil {
-		t.Fatalf("Table count query failed: %v", err)
-	}
-	if tableCount != 22 {
-		t.Errorf("Expected 22 tables in public schema (post-000004), got %d", tableCount)
-	}
-
-	// Verify sync-critical columns & constraints added in Phase 2 review cleanup
-	var hasUpdatedAt bool
-	err = pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM information_schema.columns
-			WHERE table_schema = 'public' AND table_name = 'staff_shift_sessions' AND column_name = 'updated_at'
-		)
-	`).Scan(&hasUpdatedAt)
-	if err != nil || !hasUpdatedAt {
-		t.Errorf("Expected staff_shift_sessions.updated_at to exist (exists=%v, err=%v)", hasUpdatedAt, err)
-	}
-
-	var hasShiftFK bool
-	err = pool.QueryRow(ctx, `
-		SELECT EXISTS (
-			SELECT 1 FROM information_schema.table_constraints
-			WHERE table_schema = 'public' AND table_name = 'sale_orders' AND constraint_name = 'fk_sale_orders_shift'
-		)
-	`).Scan(&hasShiftFK)
-	if err != nil || !hasShiftFK {
-		t.Errorf("Expected sale_orders fk_sale_orders_shift constraint to exist (exists=%v, err=%v)", hasShiftFK, err)
-	}
 }

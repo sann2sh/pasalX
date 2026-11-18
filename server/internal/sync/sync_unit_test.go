@@ -138,19 +138,23 @@ func TestHubFanoutCoalescingAndLimits(t *testing.T) {
 	hub := NewHub()
 	defer hub.Shutdown()
 
-	sub1, ok := hub.Subscribe("dev-id-1", "01")
+	sub1, ok := hub.Subscribe("store-1", "dev-id-1", "01")
 	if !ok {
 		t.Fatalf("Subscribe dev 01 failed")
 	}
-	sub2, ok := hub.Subscribe("dev-id-2", "02")
+	sub2, ok := hub.Subscribe("store-1", "dev-id-2", "02")
 	if !ok {
 		t.Fatalf("Subscribe dev 02 failed")
 	}
+	subOtherStore, ok := hub.Subscribe("store-2", "dev-id-other", "01")
+	if !ok {
+		t.Fatalf("Subscribe other store failed")
+	}
 
-	// Device 01 pushes -> Device 02 gets ping; Device 01 does not.
+	// Device 01 pushes in store-1 -> Device 02 in store-1 gets ping; Device 01 and store-2 do not.
 	t1 := time.Date(2026, 11, 15, 10, 1, 0, 0, time.UTC)
 	t2 := t1.Add(200 * time.Millisecond)
-	sent := hub.BroadcastDataChanged(BroadcastEvent{OriginDeviceCode: "01", ServerTime: t1, HasDiscrepancy: true})
+	sent := hub.BroadcastDataChanged(BroadcastEvent{StoreID: "store-1", OriginDeviceID: "dev-id-1", OriginDeviceCode: "01", ServerTime: t1, HasDiscrepancy: true})
 	if sent != 1 {
 		t.Fatalf("BroadcastDataChanged target count = %d, want 1", sent)
 	}
@@ -160,9 +164,14 @@ func TestHubFanoutCoalescingAndLimits(t *testing.T) {
 		t.Fatalf("origin device 01 received its own broadcast")
 	default:
 	}
+	select {
+	case <-subOtherStore.Notify():
+		t.Fatalf("store-2 received store-1 broadcast")
+	default:
+	}
 
 	// Second queued event coalesces before consumer drains, keeping max ServerTime & HasDiscrepancy=true.
-	hub.BroadcastDataChanged(BroadcastEvent{OriginDeviceCode: "03", ServerTime: t2, HasDiscrepancy: false})
+	hub.BroadcastDataChanged(BroadcastEvent{StoreID: "store-1", OriginDeviceID: "dev-id-3", OriginDeviceCode: "03", ServerTime: t2, HasDiscrepancy: false})
 	select {
 	case <-sub2.Notify():
 	case <-time.After(time.Second):
@@ -176,7 +185,7 @@ func TestHubFanoutCoalescingAndLimits(t *testing.T) {
 	// maxPerDevice stale connection eviction for dev-id-2 (already has sub2 -> 1).
 	var extras []*Subscriber
 	for i := 0; i < defaultMaxPerDevice; i++ {
-		s, ok := hub.Subscribe("dev-id-2", "02")
+		s, ok := hub.Subscribe("store-1", "dev-id-2", "02")
 		if !ok {
 			t.Fatalf("Subscribe extra %d failed", i)
 		}
@@ -189,7 +198,7 @@ func TestHubFanoutCoalescingAndLimits(t *testing.T) {
 	}
 
 	// RevokeDevice closes all active streams for dev-id-2 without affecting dev-id-1.
-	hub.RevokeDevice("dev-id-2")
+	hub.RevokeDevice("store-1", "dev-id-2")
 	for i, s := range extras {
 		select {
 		case <-s.Revoked():
@@ -206,17 +215,17 @@ func TestHubFanoutCoalescingAndLimits(t *testing.T) {
 	// Capacity limit check on isolated tiny hub.
 	smallHub := NewHub()
 	smallHub.maxSubscribers = 2
-	if _, ok := smallHub.Subscribe("a", "01"); !ok {
+	if _, ok := smallHub.Subscribe("store-1", "a", "01"); !ok {
 		t.Fatalf("first subscribe on smallHub failed")
 	}
-	if _, ok := smallHub.Subscribe("b", "02"); !ok {
+	if _, ok := smallHub.Subscribe("store-1", "b", "02"); !ok {
 		t.Fatalf("second subscribe on smallHub failed")
 	}
-	if _, ok := smallHub.Subscribe("c", "03"); ok {
+	if _, ok := smallHub.Subscribe("store-1", "c", "03"); ok {
 		t.Fatalf("third subscribe succeeded beyond maxSubscribers=2")
 	}
 	smallHub.Shutdown()
-	if _, ok := smallHub.Subscribe("d", "04"); ok {
+	if _, ok := smallHub.Subscribe("store-1", "d", "04"); ok {
 		t.Fatalf("subscribe succeeded after Shutdown")
 	}
 }

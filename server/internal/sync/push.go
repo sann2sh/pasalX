@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"pasalx/server/internal/auth"
+	"pasalx/server/internal/db"
 )
 
 // Service executes idempotent batch push, cursor-based role-masked pull,
@@ -123,6 +124,8 @@ func (s *Service) Push(ctx context.Context, sess auth.Session, req PushRequest) 
 
 	if hasChange {
 		s.hub.BroadcastDataChanged(BroadcastEvent{
+			StoreID:          sess.StoreID,
+			OriginDeviceID:   sess.DeviceID,
 			OriginDeviceCode: sess.DeviceCode,
 			ServerTime:       res.ServerTime,
 			HasDiscrepancy:   hasDisc,
@@ -132,12 +135,6 @@ func (s *Service) Push(ctx context.Context, sess auth.Session, req PushRequest) 
 }
 
 func (s *Service) execPushTx(ctx context.Context, sess auth.Session, ts time.Time, items []preparedMutation) (*PushResult, bool, bool, error) {
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
-	if err != nil {
-		return nil, false, false, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
 	out := &PushResult{
 		ServerTime:    ts,
 		Results:       make([]MutationResult, 0, len(items)),
@@ -145,66 +142,69 @@ func (s *Service) execPushTx(ctx context.Context, sess auth.Session, ts time.Tim
 	}
 	recomputeOrders := make(map[string]struct{})
 
-	for _, pm := range items {
-		tag, err := tx.Exec(ctx, `
-			INSERT INTO sync_processed_mutations (id, device_code, table_name, record_id, operation, processed_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT (id) DO NOTHING`,
-			pm.raw.ID, sess.DeviceCode, pm.raw.TableName, pm.raw.RecordID, pm.raw.Operation, ts)
-		if err != nil {
-			return nil, false, false, err
-		}
-		if tag.RowsAffected() == 0 {
-			out.DuplicateCount++
+	err := db.WithTenantTxOptions(ctx, s.db, sess.StoreID, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, func(tx pgx.Tx) error {
+		for _, pm := range items {
+			tag, err := tx.Exec(ctx, `
+				INSERT INTO sync_processed_mutations (store_id, id, device_id, device_code, table_name, record_id, operation, processed_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				ON CONFLICT (store_id, id) DO NOTHING`,
+				sess.StoreID, pm.raw.ID, sess.DeviceID, sess.DeviceCode, pm.raw.TableName, pm.raw.RecordID, pm.raw.Operation, ts)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() == 0 {
+				out.DuplicateCount++
+				out.ProcessedCount++
+				out.Results = append(out.Results, MutationResult{
+					ID:        pm.raw.ID,
+					TableName: pm.raw.TableName,
+					RecordID:  pm.raw.RecordID,
+					Status:    "ALREADY_APPLIED",
+				})
+				continue
+			}
+
+			disc, err := applyPreparedMutation(ctx, tx, sess, ts, pm, recomputeOrders)
+			if err != nil {
+				return err
+			}
+			out.AppliedCount++
 			out.ProcessedCount++
 			out.Results = append(out.Results, MutationResult{
 				ID:        pm.raw.ID,
 				TableName: pm.raw.TableName,
 				RecordID:  pm.raw.RecordID,
-				Status:    "ALREADY_APPLIED",
+				Status:    "APPLIED",
 			})
-			continue
+			if len(disc) > 0 {
+				out.Discrepancies = append(out.Discrepancies, disc...)
+			}
 		}
 
-		disc, err := applyPreparedMutation(ctx, tx, sess, ts, pm, recomputeOrders)
-		if err != nil {
-			return nil, false, false, err
+		for orderID := range recomputeOrders {
+			if _, err := tx.Exec(ctx, `
+				UPDATE sale_orders o
+				SET cost_total = COALESCE((SELECT SUM(si.quantity * si.cost_price) FROM sale_items si WHERE si.sale_order_id = o.id AND si.store_id = o.store_id), 0.00),
+				    net_profit = o.total_amount - COALESCE((SELECT SUM(si.quantity * si.cost_price) FROM sale_items si WHERE si.sale_order_id = o.id AND si.store_id = o.store_id), 0.00),
+				    updated_at = GREATEST(COALESCE(o.updated_at, $2), $2)
+				WHERE o.id = $1 AND o.store_id = $3 AND EXISTS (SELECT 1 FROM sale_items si WHERE si.sale_order_id = o.id AND si.store_id = o.store_id)`,
+				orderID, ts, sess.StoreID); err != nil {
+				return err
+			}
 		}
-		out.AppliedCount++
-		out.ProcessedCount++
-		out.Results = append(out.Results, MutationResult{
-			ID:        pm.raw.ID,
-			TableName: pm.raw.TableName,
-			RecordID:  pm.raw.RecordID,
-			Status:    "APPLIED",
-		})
-		if len(disc) > 0 {
-			out.Discrepancies = append(out.Discrepancies, disc...)
-		}
-	}
 
-	for orderID := range recomputeOrders {
-		if _, err := tx.Exec(ctx, `
-			UPDATE sale_orders o
-			SET cost_total = COALESCE((SELECT SUM(si.quantity * si.cost_price) FROM sale_items si WHERE si.sale_order_id = o.id), 0.00),
-			    net_profit = o.total_amount - COALESCE((SELECT SUM(si.quantity * si.cost_price) FROM sale_items si WHERE si.sale_order_id = o.id), 0.00),
-			    updated_at = GREATEST(COALESCE(o.updated_at, $2), $2)
-			WHERE o.id = $1 AND EXISTS (SELECT 1 FROM sale_items si WHERE si.sale_order_id = o.id)`, orderID, ts); err != nil {
-			return nil, false, false, err
+		if out.AppliedCount > 0 {
+			if _, err := tx.Exec(ctx, `
+				UPDATE staff_shift_sessions
+				SET last_synced_at = $4, updated_at = GREATEST(COALESCE(updated_at, $4), $4)
+				WHERE store_id = $1 AND device_id = $2 AND user_id = $3 AND status = 'ACTIVE'`,
+				sess.StoreID, sess.DeviceID, sess.UserID, ts); err != nil {
+				return err
+			}
 		}
-	}
-
-	if out.AppliedCount > 0 {
-		if _, err := tx.Exec(ctx, `
-			UPDATE staff_shift_sessions
-			SET last_synced_at = $3, updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-			WHERE device_code = $1 AND user_id = $2 AND status = 'ACTIVE'`,
-			sess.DeviceCode, sess.UserID, ts); err != nil {
-			return nil, false, false, err
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, false, false, err
 	}
 	return out, out.AppliedCount > 0, len(out.Discrepancies) > 0, nil
@@ -920,25 +920,25 @@ func applyPreparedMutation(ctx context.Context, tx pgx.Tx, sess auth.Session, ts
 	lwwTS := resolveClientLWW(ts, pm)
 	switch pm.raw.TableName {
 	case TableProducts:
-		return nil, applyProduct(ctx, tx, ts, lwwTS, pm.raw.Operation, pm.product)
+		return nil, applyProduct(ctx, tx, sess, ts, lwwTS, pm.raw.Operation, pm.product)
 	case TableProductVariants:
-		return nil, applyProductVariant(ctx, tx, ts, lwwTS, pm.raw.Operation, pm.variant)
+		return nil, applyProductVariant(ctx, tx, sess, ts, lwwTS, pm.raw.Operation, pm.variant)
 	case TableBatches:
 		return nil, applyBatch(ctx, tx, sess, ts, lwwTS, pm.raw.Operation, pm.batch)
 	case TableCustomers:
 		return nil, applyCustomer(ctx, tx, sess, ts, lwwTS, pm.raw.Operation, pm.customer)
 	case TableCustomerShadeProfiles:
-		return nil, applyCustomerShadeProfile(ctx, tx, ts, lwwTS, pm.shadeProf)
+		return nil, applyCustomerShadeProfile(ctx, tx, sess, ts, lwwTS, pm.shadeProf)
 	case TableCustomerTransactions:
-		return nil, applyCustomerTransaction(ctx, tx, ts, pm.customerTx)
+		return nil, applyCustomerTransaction(ctx, tx, sess, ts, pm.customerTx)
 	case TableSuppliers:
-		return nil, applySupplier(ctx, tx, ts, lwwTS, pm.raw.Operation, pm.supplier)
+		return nil, applySupplier(ctx, tx, sess, ts, lwwTS, pm.raw.Operation, pm.supplier)
 	case TablePurchaseInvoices:
-		return nil, applyPurchaseInvoice(ctx, tx, ts, pm.invoice)
+		return nil, applyPurchaseInvoice(ctx, tx, sess, ts, pm.invoice)
 	case TablePurchaseInvoiceItems:
-		return nil, applyPurchaseInvoiceItem(ctx, tx, ts, pm.invItem)
+		return nil, applyPurchaseInvoiceItem(ctx, tx, sess, ts, pm.invItem)
 	case TableSupplierPayments:
-		return nil, applySupplierPayment(ctx, tx, ts, pm.supPayment)
+		return nil, applySupplierPayment(ctx, tx, sess, ts, pm.supPayment)
 	case TableStockMovements:
 		disc, err := applyStockMovement(ctx, tx, sess, ts, pm.movement)
 		if err != nil {
@@ -953,13 +953,13 @@ func applyPreparedMutation(ctx context.Context, tx pgx.Tx, sess auth.Session, ts
 	case TableSaleItems:
 		return nil, applySaleItem(ctx, tx, sess, ts, pm.saleItem, recomputeOrders)
 	case TableSalePayments:
-		return nil, applySalePayment(ctx, tx, ts, pm.salePay)
+		return nil, applySalePayment(ctx, tx, sess, ts, pm.salePay)
 	case TableRegisterShifts:
 		return nil, applyRegisterShift(ctx, tx, sess, ts, pm.raw.Operation, pm.regShift)
 	case TableStaffShiftSessions:
 		return nil, applyStaffShiftSession(ctx, tx, sess, ts, pm.raw.Operation, pm.staffSess)
 	case TableExpenses:
-		return nil, applyExpense(ctx, tx, ts, pm.expense)
+		return nil, applyExpense(ctx, tx, sess, ts, pm.expense)
 	default:
 		return nil, newErr(http.StatusBadRequest, CodeBadRequest, "unsupported table")
 	}
@@ -976,7 +976,45 @@ func ensureRowExists(ctx context.Context, tx pgx.Tx, table, id string) error {
 	return nil
 }
 
-func applyProduct(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op string, r *ProductRecord) error {
+// checkSameStoreOrForbidden is called when an INSERT ... ON CONFLICT (id) returns 0 rows.
+// Inside WithTenantTx(sess.StoreID), RLS hides rows owned by other stores:
+// - exists == true  => row belongs to this store (LWW skipped or idempotent retry) -> nil
+// - exists == false => primary key id belongs to another store -> 403 FORBIDDEN + audit log
+func checkSameStoreOrForbidden(ctx context.Context, tx pgx.Tx, sess auth.Session, table, id string) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM `+table+` WHERE id = $1 AND store_id = $2)`, id, sess.StoreID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	metaJSON, _ := json.Marshal(map[string]any{"table": table, "record_id": id})
+	_, _ = tx.Exec(ctx, `
+		INSERT INTO app_audit_logs (id, store_id, event_type, user_id, device_id, device_code, metadata)
+		VALUES ($1, $2, 'CROSS_TENANT_ATTEMPT', $3, $4, $5, $6)`,
+		uuid.NewString(), sess.StoreID, sess.UserID, sess.DeviceID, sess.DeviceCode, metaJSON)
+	return newErr(http.StatusForbidden, CodeForbidden, "record id belongs to another store")
+}
+
+func requireStoreMember(ctx context.Context, tx pgx.Tx, storeID string, userIDs ...*string) error {
+	for _, uid := range userIDs {
+		if uid == nil || *uid == "" {
+			continue
+		}
+		var ok bool
+		if err := tx.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM store_memberships WHERE store_id = $1 AND user_id = $2)`,
+			storeID, *uid).Scan(&ok); err != nil {
+			return err
+		}
+		if !ok {
+			return newErr(http.StatusForbidden, CodeForbidden, "referenced user does not belong to this store")
+		}
+	}
+	return nil
+}
+
+func applyProduct(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS time.Time, op string, r *ProductRecord) error {
 	if op == OpDelete {
 		delAt := ts
 		if r.DeletedAt != nil {
@@ -985,8 +1023,8 @@ func applyProduct(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op string
 		tag, err := tx.Exec(ctx, `
 			UPDATE products
 			SET deleted_at = COALESCE(deleted_at, $2), client_updated_at = $3, updated_at = GREATEST(COALESCE(updated_at, $4), $4)
-			WHERE id = $1 AND COALESCE(client_updated_at, created_at) <= $3`,
-			r.ID, delAt, lwwTS, ts)
+			WHERE id = $1 AND store_id = $5 AND COALESCE(client_updated_at, created_at) <= $3`,
+			r.ID, delAt, lwwTS, ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -996,9 +1034,9 @@ func applyProduct(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op string
 		return nil
 	}
 	createdAt := derefTimeOr(r.CreatedAt, ts)
-	_, err := tx.Exec(ctx, `
-		INSERT INTO products (id, name, brand, category, is_generic, photo_url, created_at, updated_at, deleted_at, client_updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO products (id, store_id, name, brand, category, is_generic, photo_url, created_at, updated_at, deleted_at, client_updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			brand = EXCLUDED.brand,
@@ -1008,12 +1046,19 @@ func applyProduct(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op string
 			deleted_at = COALESCE(products.deleted_at, EXCLUDED.deleted_at),
 			client_updated_at = EXCLUDED.client_updated_at,
 			updated_at = GREATEST(COALESCE(products.updated_at, EXCLUDED.updated_at), EXCLUDED.updated_at)
-		WHERE COALESCE(products.client_updated_at, products.created_at) <= EXCLUDED.client_updated_at`,
-		r.ID, r.Name, r.Brand, r.Category, r.IsGeneric, r.PhotoURL, createdAt, ts, r.DeletedAt, lwwTS)
-	return err
+		WHERE products.store_id = EXCLUDED.store_id
+		  AND COALESCE(products.client_updated_at, products.created_at) <= EXCLUDED.client_updated_at`,
+		r.ID, sess.StoreID, r.Name, r.Brand, r.Category, r.IsGeneric, r.PhotoURL, createdAt, ts, r.DeletedAt, lwwTS)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "products", r.ID)
+	}
+	return nil
 }
 
-func applyProductVariant(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op string, r *ProductVariantRecord) error {
+func applyProductVariant(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS time.Time, op string, r *ProductVariantRecord) error {
 	if op == OpDelete {
 		delAt := ts
 		if r.DeletedAt != nil {
@@ -1022,8 +1067,8 @@ func applyProductVariant(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op
 		tag, err := tx.Exec(ctx, `
 			UPDATE product_variants
 			SET deleted_at = COALESCE(deleted_at, $2), is_active = FALSE, client_updated_at = $3, updated_at = GREATEST(COALESCE(updated_at, $4), $4)
-			WHERE id = $1 AND COALESCE(client_updated_at, created_at) <= $3`,
-			r.ID, delAt, lwwTS, ts)
+			WHERE id = $1 AND store_id = $5 AND COALESCE(client_updated_at, created_at) <= $3`,
+			r.ID, delAt, lwwTS, ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -1037,9 +1082,9 @@ func applyProductVariant(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op
 		isActive = *r.IsActive
 	}
 	createdAt := derefTimeOr(r.CreatedAt, ts)
-	_, err := tx.Exec(ctx, `
-		INSERT INTO product_variants (id, product_id, variant_name, size_volume, color_hex, attributes, is_active, created_at, updated_at, deleted_at, client_updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11)
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO product_variants (id, store_id, product_id, variant_name, size_volume, color_hex, attributes, is_active, created_at, updated_at, deleted_at, client_updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
 			product_id = EXCLUDED.product_id,
 			variant_name = EXCLUDED.variant_name,
@@ -1050,9 +1095,16 @@ func applyProductVariant(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op
 			deleted_at = COALESCE(product_variants.deleted_at, EXCLUDED.deleted_at),
 			client_updated_at = EXCLUDED.client_updated_at,
 			updated_at = GREATEST(COALESCE(product_variants.updated_at, EXCLUDED.updated_at), EXCLUDED.updated_at)
-		WHERE COALESCE(product_variants.client_updated_at, product_variants.created_at) <= EXCLUDED.client_updated_at`,
-		r.ID, r.ProductID, r.VariantName, r.SizeVolume, r.ColorHex, string(r.Attributes), isActive, createdAt, ts, r.DeletedAt, lwwTS)
-	return err
+		WHERE product_variants.store_id = EXCLUDED.store_id
+		  AND COALESCE(product_variants.client_updated_at, product_variants.created_at) <= EXCLUDED.client_updated_at`,
+		r.ID, sess.StoreID, r.ProductID, r.VariantName, r.SizeVolume, r.ColorHex, string(r.Attributes), isActive, createdAt, ts, r.DeletedAt, lwwTS)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "product_variants", r.ID)
+	}
+	return nil
 }
 
 func applyBatch(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS time.Time, op string, r *BatchRecord) error {
@@ -1064,8 +1116,8 @@ func applyBatch(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS tim
 		tag, err := tx.Exec(ctx, `
 			UPDATE batches
 			SET deleted_at = COALESCE(deleted_at, $2), client_updated_at = $3, updated_at = GREATEST(COALESCE(updated_at, $4), $4)
-			WHERE id = $1 AND COALESCE(client_updated_at, created_at) <= $3`,
-			r.ID, delAt, lwwTS, ts)
+			WHERE id = $1 AND store_id = $5 AND COALESCE(client_updated_at, created_at) <= $3`,
+			r.ID, delAt, lwwTS, ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -1082,27 +1134,34 @@ func applyBatch(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS tim
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	// stock_quantity ALWAYS starts at 0 on insert and is NEVER overwritten on update:
 	// stock changes exclusively arrive as atomic deltas via stock_movements.
-	_, err := tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		INSERT INTO batches
-			(id, variant_id, supplier_id, purchase_invoice_id, batch_code, sticker_barcode,
+			(id, store_id, variant_id, supplier_id, purchase_invoice_id, batch_code, sticker_barcode,
 			 cost_price, selling_price, stock_quantity, expiry_date, created_at, updated_at, deleted_at, client_updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, $9::date, $10, $11, $12, $13)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $10::date, $11, $12, $13, $14)
 		ON CONFLICT (id) DO UPDATE SET
 			variant_id = EXCLUDED.variant_id,
 			supplier_id = COALESCE(EXCLUDED.supplier_id, batches.supplier_id),
 			purchase_invoice_id = COALESCE(EXCLUDED.purchase_invoice_id, batches.purchase_invoice_id),
 			batch_code = EXCLUDED.batch_code,
 			sticker_barcode = EXCLUDED.sticker_barcode,
-			cost_price = CASE WHEN $14 THEN EXCLUDED.cost_price ELSE batches.cost_price END,
+			cost_price = CASE WHEN $15 THEN EXCLUDED.cost_price ELSE batches.cost_price END,
 			selling_price = EXCLUDED.selling_price,
 			expiry_date = EXCLUDED.expiry_date,
 			deleted_at = COALESCE(batches.deleted_at, EXCLUDED.deleted_at),
 			client_updated_at = EXCLUDED.client_updated_at,
 			updated_at = GREATEST(COALESCE(batches.updated_at, EXCLUDED.updated_at), EXCLUDED.updated_at)
-		WHERE COALESCE(batches.client_updated_at, batches.created_at) <= EXCLUDED.client_updated_at`,
-		r.ID, r.VariantID, r.SupplierID, r.PurchaseInvoiceID, r.BatchCode, r.StickerBarcode,
+		WHERE batches.store_id = EXCLUDED.store_id
+		  AND COALESCE(batches.client_updated_at, batches.created_at) <= EXCLUDED.client_updated_at`,
+		r.ID, sess.StoreID, r.VariantID, r.SupplierID, r.PurchaseInvoiceID, r.BatchCode, r.StickerBarcode,
 		costStr, r.SellingPrice.String(), r.ExpiryDate, createdAt, ts, r.DeletedAt, lwwTS, hasOwnerCost)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "batches", r.ID)
+	}
+	return nil
 }
 
 func applyCustomer(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS time.Time, op string, r *CustomerRecord) error {
@@ -1114,8 +1173,8 @@ func applyCustomer(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS 
 		tag, err := tx.Exec(ctx, `
 			UPDATE customers
 			SET deleted_at = COALESCE(deleted_at, $2), client_updated_at = $3, updated_at = GREATEST(COALESCE(updated_at, $4), $4)
-			WHERE id = $1 AND COALESCE(client_updated_at, created_at) <= $3`,
-			r.ID, delAt, lwwTS, ts)
+			WHERE id = $1 AND store_id = $5 AND COALESCE(client_updated_at, created_at) <= $3`,
+			r.ID, delAt, lwwTS, ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -1132,29 +1191,36 @@ func applyCustomer(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS 
 	canUpdateCreditLimit := (sess.Role == auth.RoleOwner || sess.Role == auth.RoleManager) && hasCreditLimit
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	// current_balance_due initializes to 0.00 and only changes atomically via customer_transactions.
-	_, err := tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		INSERT INTO customers
-			(id, name, phone, address, credit_limit, current_balance_due, favorite_shade_notes, created_at, updated_at, deleted_at, client_updated_at)
-		VALUES ($1, $2, $3, $4, $5, 0.00, $6, $7, $8, $9, $10)
+			(id, store_id, name, phone, address, credit_limit, current_balance_due, favorite_shade_notes, created_at, updated_at, deleted_at, client_updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 0.00, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			phone = EXCLUDED.phone,
 			address = EXCLUDED.address,
-			credit_limit = CASE WHEN $11 THEN EXCLUDED.credit_limit ELSE customers.credit_limit END,
+			credit_limit = CASE WHEN $12 THEN EXCLUDED.credit_limit ELSE customers.credit_limit END,
 			favorite_shade_notes = EXCLUDED.favorite_shade_notes,
 			deleted_at = COALESCE(customers.deleted_at, EXCLUDED.deleted_at),
 			client_updated_at = EXCLUDED.client_updated_at,
 			updated_at = GREATEST(COALESCE(customers.updated_at, EXCLUDED.updated_at), EXCLUDED.updated_at)
-		WHERE COALESCE(customers.client_updated_at, customers.created_at) <= EXCLUDED.client_updated_at`,
-		r.ID, r.Name, r.Phone, r.Address, creditLimit, r.FavoriteShadeNotes, createdAt, ts, r.DeletedAt, lwwTS, canUpdateCreditLimit)
-	return err
+		WHERE customers.store_id = EXCLUDED.store_id
+		  AND COALESCE(customers.client_updated_at, customers.created_at) <= EXCLUDED.client_updated_at`,
+		r.ID, sess.StoreID, r.Name, r.Phone, r.Address, creditLimit, r.FavoriteShadeNotes, createdAt, ts, r.DeletedAt, lwwTS, canUpdateCreditLimit)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "customers", r.ID)
+	}
+	return nil
 }
 
-func applyCustomerShadeProfile(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, r *CustomerShadeProfileRecord) error {
+func applyCustomerShadeProfile(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS time.Time, r *CustomerShadeProfileRecord) error {
 	createdAt := derefTimeOr(r.CreatedAt, ts)
-	_, err := tx.Exec(ctx, `
-		INSERT INTO customer_shade_profiles (id, customer_id, product_name, brand, shade_variant, notes, created_at, updated_at, client_updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO customer_shade_profiles (id, store_id, customer_id, product_name, brand, shade_variant, notes, created_at, updated_at, client_updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			customer_id = EXCLUDED.customer_id,
 			product_name = EXCLUDED.product_name,
@@ -1163,14 +1229,24 @@ func applyCustomerShadeProfile(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Ti
 			notes = EXCLUDED.notes,
 			client_updated_at = EXCLUDED.client_updated_at,
 			updated_at = GREATEST(COALESCE(customer_shade_profiles.updated_at, EXCLUDED.updated_at), EXCLUDED.updated_at)
-		WHERE COALESCE(customer_shade_profiles.client_updated_at, customer_shade_profiles.created_at) <= EXCLUDED.client_updated_at`,
-		r.ID, r.CustomerID, r.ProductName, r.Brand, r.ShadeVariant, r.Notes, createdAt, ts, lwwTS)
-	return err
+		WHERE customer_shade_profiles.store_id = EXCLUDED.store_id
+		  AND COALESCE(customer_shade_profiles.client_updated_at, customer_shade_profiles.created_at) <= EXCLUDED.client_updated_at`,
+		r.ID, sess.StoreID, r.CustomerID, r.ProductName, r.Brand, r.ShadeVariant, r.Notes, createdAt, ts, lwwTS)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "customer_shade_profiles", r.ID)
+	}
+	return nil
 }
 
-func applyCustomerTransaction(ctx context.Context, tx pgx.Tx, ts time.Time, r *CustomerTransactionRecord) error {
+func applyCustomerTransaction(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *CustomerTransactionRecord) error {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, r.CreatedByUserID); err != nil {
+		return err
+	}
 	var curBalStr string
-	err := tx.QueryRow(ctx, `SELECT current_balance_due::text FROM customers WHERE id = $1 FOR UPDATE`, r.CustomerID).Scan(&curBalStr)
+	err := tx.QueryRow(ctx, `SELECT current_balance_due::text FROM customers WHERE id = $1 AND store_id = $2 FOR UPDATE`, r.CustomerID, sess.StoreID).Scan(&curBalStr)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "customer_id not found")
 	}
@@ -1193,20 +1269,20 @@ func applyCustomerTransaction(ctx context.Context, tx pgx.Tx, ts time.Time, r *C
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO customer_transactions
-			(id, customer_id, type, amount, balance_after, reference_bill_no, payment_method, notes, created_by_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			(id, store_id, customer_id, type, amount, balance_after, reference_bill_no, payment_method, notes, created_by_user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.CustomerID, r.Type, r.Amount.String(), newBal.String(), r.ReferenceBillNo, r.PaymentMethod, r.Notes, r.CreatedByUserID, createdAt, ts)
+		r.ID, sess.StoreID, r.CustomerID, r.Type, r.Amount.String(), newBal.String(), r.ReferenceBillNo, r.PaymentMethod, r.Notes, r.CreatedByUserID, createdAt, ts)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return nil
+		return checkSameStoreOrForbidden(ctx, tx, sess, "customer_transactions", r.ID)
 	}
 
 	if _, err := tx.Exec(ctx, `
-		UPDATE customers SET current_balance_due = $2, updated_at = GREATEST(COALESCE(updated_at, $3), $3) WHERE id = $1`,
-		r.CustomerID, newBal.String(), ts); err != nil {
+		UPDATE customers SET current_balance_due = $2, updated_at = GREATEST(COALESCE(updated_at, $3), $3) WHERE id = $1 AND store_id = $4`,
+		r.CustomerID, newBal.String(), ts, sess.StoreID); err != nil {
 		return err
 	}
 
@@ -1216,8 +1292,8 @@ func applyCustomerTransaction(ctx context.Context, tx pgx.Tx, ts time.Time, r *C
 			SET khata_cash_repayments = khata_cash_repayments + $2,
 			    expected_cash = expected_cash + $2,
 			    updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-			WHERE id = $1`,
-			*r.ShiftID, r.Amount.String(), ts)
+			WHERE id = $1 AND store_id = $4`,
+			*r.ShiftID, r.Amount.String(), ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -1228,7 +1304,7 @@ func applyCustomerTransaction(ctx context.Context, tx pgx.Tx, ts time.Time, r *C
 	return nil
 }
 
-func applySupplier(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op string, r *SupplierRecord) error {
+func applySupplier(ctx context.Context, tx pgx.Tx, sess auth.Session, ts, lwwTS time.Time, op string, r *SupplierRecord) error {
 	if op == OpDelete {
 		delAt := ts
 		if r.DeletedAt != nil {
@@ -1237,8 +1313,8 @@ func applySupplier(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op strin
 		tag, err := tx.Exec(ctx, `
 			UPDATE suppliers
 			SET deleted_at = COALESCE(deleted_at, $2), client_updated_at = $3, updated_at = GREATEST(COALESCE(updated_at, $4), $4)
-			WHERE id = $1 AND COALESCE(client_updated_at, created_at) <= $3`,
-			r.ID, delAt, lwwTS, ts)
+			WHERE id = $1 AND store_id = $5 AND COALESCE(client_updated_at, created_at) <= $3`,
+			r.ID, delAt, lwwTS, ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -1250,9 +1326,9 @@ func applySupplier(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op strin
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	// Supplier financial ledgers (total_purchased/total_paid/balance_due) only change
 	// via purchase_invoices & supplier_payments.
-	_, err := tx.Exec(ctx, `
-		INSERT INTO suppliers (id, name, phone, pan_vat, address, total_purchased, total_paid, balance_due, created_at, updated_at, deleted_at, client_updated_at)
-		VALUES ($1, $2, $3, $4, $5, 0.00, 0.00, 0.00, $6, $7, $8, $9)
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO suppliers (id, store_id, name, phone, pan_vat, address, total_purchased, total_paid, balance_due, created_at, updated_at, deleted_at, client_updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, 0.00, 0.00, 0.00, $7, $8, $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			phone = EXCLUDED.phone,
@@ -1261,25 +1337,35 @@ func applySupplier(ctx context.Context, tx pgx.Tx, ts, lwwTS time.Time, op strin
 			deleted_at = COALESCE(suppliers.deleted_at, EXCLUDED.deleted_at),
 			client_updated_at = EXCLUDED.client_updated_at,
 			updated_at = GREATEST(COALESCE(suppliers.updated_at, EXCLUDED.updated_at), EXCLUDED.updated_at)
-		WHERE COALESCE(suppliers.client_updated_at, suppliers.created_at) <= EXCLUDED.client_updated_at`,
-		r.ID, r.Name, r.Phone, r.PanVAT, r.Address, createdAt, ts, r.DeletedAt, lwwTS)
-	return err
+		WHERE suppliers.store_id = EXCLUDED.store_id
+		  AND COALESCE(suppliers.client_updated_at, suppliers.created_at) <= EXCLUDED.client_updated_at`,
+		r.ID, sess.StoreID, r.Name, r.Phone, r.PanVAT, r.Address, createdAt, ts, r.DeletedAt, lwwTS)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "suppliers", r.ID)
+	}
+	return nil
 }
 
-func applyPurchaseInvoice(ctx context.Context, tx pgx.Tx, ts time.Time, r *PurchaseInvoiceRecord) error {
+func applyPurchaseInvoice(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *PurchaseInvoiceRecord) error {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, r.CreatedByUserID); err != nil {
+		return err
+	}
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO purchase_invoices
-			(id, supplier_id, invoice_no, invoice_date, total_amount, paid_amount, due_amount, status, notes, created_by_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4::date, $5, $6, $7, $8, $9, $10, $11, $12)
+			(id, store_id, supplier_id, invoice_no, invoice_date, total_amount, paid_amount, due_amount, status, notes, created_by_user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.SupplierID, r.InvoiceNo, r.InvoiceDate, r.TotalAmount.String(), r.PaidAmount.String(), r.DueAmount.String(),
+		r.ID, sess.StoreID, r.SupplierID, r.InvoiceNo, r.InvoiceDate, r.TotalAmount.String(), r.PaidAmount.String(), r.DueAmount.String(),
 		r.Status, r.Notes, r.CreatedByUserID, createdAt, ts)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return nil
+		return checkSameStoreOrForbidden(ctx, tx, sess, "purchase_invoices", r.ID)
 	}
 	updTag, err := tx.Exec(ctx, `
 		UPDATE suppliers
@@ -1287,8 +1373,8 @@ func applyPurchaseInvoice(ctx context.Context, tx pgx.Tx, ts time.Time, r *Purch
 		    total_paid = total_paid + $3,
 		    balance_due = balance_due + $4,
 		    updated_at = GREATEST(COALESCE(updated_at, $5), $5)
-		WHERE id = $1`,
-		r.SupplierID, r.TotalAmount.String(), r.PaidAmount.String(), r.DueAmount.String(), ts)
+		WHERE id = $1 AND store_id = $6`,
+		r.SupplierID, r.TotalAmount.String(), r.PaidAmount.String(), r.DueAmount.String(), ts, sess.StoreID)
 	if err != nil {
 		return err
 	}
@@ -1296,14 +1382,14 @@ func applyPurchaseInvoice(ctx context.Context, tx pgx.Tx, ts time.Time, r *Purch
 		return newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "supplier_id not found")
 	}
 	for i := range r.Items {
-		if err := applyPurchaseInvoiceItem(ctx, tx, ts, &r.Items[i]); err != nil {
+		if err := applyPurchaseInvoiceItem(ctx, tx, sess, ts, &r.Items[i]); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func applyPurchaseInvoiceItem(ctx context.Context, tx pgx.Tx, ts time.Time, r *PurchaseInvoiceItemRecord) error {
+func applyPurchaseInvoiceItem(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *PurchaseInvoiceItemRecord) error {
 	unitCost := "0.00"
 	if r.UnitCostPrice != nil {
 		unitCost = r.UnitCostPrice.String()
@@ -1313,34 +1399,43 @@ func applyPurchaseInvoiceItem(ctx context.Context, tx pgx.Tx, ts time.Time, r *P
 		totalCost = r.TotalCost.String()
 	}
 	createdAt := derefTimeOr(r.CreatedAt, ts)
-	_, err := tx.Exec(ctx, `
-		INSERT INTO purchase_invoice_items
-			(id, purchase_invoice_id, variant_id, batch_id, product_name, variant_name,
-			 quantity_received, unit_cost_price, unit_selling_price, total_cost, batch_code, expiry_date, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::date, $13, $14)
-		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.PurchaseInvoiceID, r.VariantID, r.BatchID, r.ProductName, r.VariantName,
-		r.QuantityReceived, unitCost, r.UnitSellingPrice.String(), totalCost, r.BatchCode, r.ExpiryDate, createdAt, ts)
-	return err
-}
-
-func applySupplierPayment(ctx context.Context, tx pgx.Tx, ts time.Time, r *SupplierPaymentRecord) error {
-	createdAt := derefTimeOr(r.CreatedAt, ts)
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO supplier_payments
-			(id, supplier_id, purchase_invoice_id, amount, payment_method, reference_no, created_by_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO purchase_invoice_items
+			(id, store_id, purchase_invoice_id, variant_id, batch_id, product_name, variant_name,
+			 quantity_received, unit_cost_price, unit_selling_price, total_cost, batch_code, expiry_date, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::date, $14, $15)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.SupplierID, r.PurchaseInvoiceID, r.Amount.String(), r.PaymentMethod, r.ReferenceNo, r.CreatedByUserID, createdAt, ts)
+		r.ID, sess.StoreID, r.PurchaseInvoiceID, r.VariantID, r.BatchID, r.ProductName, r.VariantName,
+		r.QuantityReceived, unitCost, r.UnitSellingPrice.String(), totalCost, r.BatchCode, r.ExpiryDate, createdAt, ts)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return nil
+		return checkSameStoreOrForbidden(ctx, tx, sess, "purchase_invoice_items", r.ID)
+	}
+	return nil
+}
+
+func applySupplierPayment(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *SupplierPaymentRecord) error {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, r.CreatedByUserID); err != nil {
+		return err
+	}
+	createdAt := derefTimeOr(r.CreatedAt, ts)
+	tag, err := tx.Exec(ctx, `
+		INSERT INTO supplier_payments
+			(id, store_id, supplier_id, purchase_invoice_id, amount, payment_method, reference_no, created_by_user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (id) DO NOTHING`,
+		r.ID, sess.StoreID, r.SupplierID, r.PurchaseInvoiceID, r.Amount.String(), r.PaymentMethod, r.ReferenceNo, r.CreatedByUserID, createdAt, ts)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "supplier_payments", r.ID)
 	}
 	if r.PurchaseInvoiceID != nil {
 		var invSupplierID, invDueStr string
-		err := tx.QueryRow(ctx, `SELECT supplier_id, due_amount::text FROM purchase_invoices WHERE id = $1 FOR UPDATE`, *r.PurchaseInvoiceID).Scan(&invSupplierID, &invDueStr)
+		err := tx.QueryRow(ctx, `SELECT supplier_id, due_amount::text FROM purchase_invoices WHERE id = $1 AND store_id = $2 FOR UPDATE`, *r.PurchaseInvoiceID, sess.StoreID).Scan(&invSupplierID, &invDueStr)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "purchase_invoice_id not found")
 		}
@@ -1363,7 +1458,7 @@ func applySupplierPayment(ctx context.Context, tx pgx.Tx, ts time.Time, r *Suppl
 			    due_amount = due_amount - $2,
 			    status = CASE WHEN due_amount - $2 <= 0.00 THEN 'PAID' ELSE 'PARTIAL' END,
 			    updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-			WHERE id = $1 AND supplier_id = $4`, *r.PurchaseInvoiceID, r.Amount.String(), ts, r.SupplierID); err != nil {
+			WHERE id = $1 AND store_id = $5 AND supplier_id = $4`, *r.PurchaseInvoiceID, r.Amount.String(), ts, r.SupplierID, sess.StoreID); err != nil {
 			return err
 		}
 	}
@@ -1372,7 +1467,7 @@ func applySupplierPayment(ctx context.Context, tx pgx.Tx, ts time.Time, r *Suppl
 		SET total_paid = total_paid + $2,
 		    balance_due = balance_due - $2,
 		    updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-		WHERE id = $1`, r.SupplierID, r.Amount.String(), ts)
+		WHERE id = $1 AND store_id = $4`, r.SupplierID, r.Amount.String(), ts, sess.StoreID)
 	if err != nil {
 		return err
 	}
@@ -1386,15 +1481,18 @@ func applyStockMovement(ctx context.Context, tx pgx.Tx, sess auth.Session, ts ti
 	delta := *r.QuantityChange
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO stock_movements (id, batch_id, movement_type, quantity, reference_id, reason, staff_name, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO stock_movements (id, store_id, batch_id, movement_type, quantity, reference_id, reason, staff_name, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.BatchID, r.MovementType, delta, r.ReferenceID, r.Reason, r.StaffName, createdAt, ts)
+		r.ID, sess.StoreID, r.BatchID, r.MovementType, delta, r.ReferenceID, r.Reason, r.StaffName, createdAt, ts)
 	if err != nil {
 		return nil, err
 	}
 	if tag.RowsAffected() == 0 {
-		// Duplicate stock_movement UUID: already applied on an earlier request -> zero double-deduction.
+		if err := checkSameStoreOrForbidden(ctx, tx, sess, "stock_movements", r.ID); err != nil {
+			return nil, err
+		}
+		// Duplicate stock_movement UUID in same store: zero double-deduction.
 		return nil, nil
 	}
 
@@ -1403,9 +1501,9 @@ func applyStockMovement(ctx context.Context, tx pgx.Tx, sess auth.Session, ts ti
 		UPDATE batches
 		SET stock_quantity = stock_quantity + $2,
 		    updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-		WHERE id = $1
+		WHERE id = $1 AND store_id = $4
 		RETURNING stock_quantity`,
-		r.BatchID, delta, ts).Scan(&postQty)
+		r.BatchID, delta, ts, sess.StoreID).Scan(&postQty)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "batch_id not found")
 	}
@@ -1420,10 +1518,10 @@ func applyStockMovement(ctx context.Context, tx pgx.Tx, sess auth.Session, ts ti
 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO inventory_sync_audit
-			(id, batch_id, device_code, operation, quantity_change, pre_sync_qty, post_sync_qty, is_discrepancy, reference_id, stock_movement_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
-		ON CONFLICT (stock_movement_id) DO NOTHING`,
-		auditID, r.BatchID, sess.DeviceCode, auditOp, delta, preQty, postQty, isDisc, r.ReferenceID, r.ID, ts); err != nil {
+			(id, store_id, batch_id, device_id, device_code, operation, quantity_change, pre_sync_qty, post_sync_qty, is_discrepancy, reference_id, stock_movement_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+		ON CONFLICT (store_id, stock_movement_id) DO NOTHING`,
+		auditID, sess.StoreID, r.BatchID, sess.DeviceID, sess.DeviceCode, auditOp, delta, preQty, postQty, isDisc, r.ReferenceID, r.ID, ts); err != nil {
 		return nil, err
 	}
 
@@ -1458,6 +1556,9 @@ func mapAuditOp(movementType string) string {
 }
 
 func applySaleOrder(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *SaleOrderRecord, recomputeOrders map[string]struct{}) ([]DiscrepancyAlert, error) {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, &r.CashierUserID); err != nil {
+		return nil, err
+	}
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	costTotal := Money(0)
 	netProfit := r.TotalAmount
@@ -1475,18 +1576,18 @@ func applySaleOrder(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.T
 
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO sale_orders
-			(id, bill_no, customer_id, customer_name, customer_phone, cashier_user_id, cashier_name, shift_id,
+			(id, store_id, bill_no, customer_id, customer_name, customer_phone, cashier_user_id, cashier_name, shift_id,
 			 subtotal, discount_amount, total_amount, cost_total, net_profit, payment_mode, sync_status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 'SYNCED', $15, $16)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'SYNCED', $16, $17)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.BillNo, r.CustomerID, r.CustomerName, r.CustomerPhone, r.CashierUserID, r.CashierName, r.ShiftID,
+		r.ID, sess.StoreID, r.BillNo, r.CustomerID, r.CustomerName, r.CustomerPhone, r.CashierUserID, r.CashierName, r.ShiftID,
 		r.Subtotal.String(), r.DiscountAmount.String(), r.TotalAmount.String(), costTotal.String(), netProfit.String(),
 		r.PaymentMode, createdAt, ts)
 	if err != nil {
 		return nil, err
 	}
 	if tag.RowsAffected() == 0 {
-		return nil, nil
+		return nil, checkSameStoreOrForbidden(ctx, tx, sess, "sale_orders", r.ID)
 	}
 	if needRecompute || len(r.Items) > 0 {
 		// Recompute from authoritative sale_items cost_price at the end of the push tx.
@@ -1499,7 +1600,7 @@ func applySaleOrder(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.T
 		}
 	}
 	for i := range r.Payments {
-		if err := applySalePayment(ctx, tx, ts, &r.Payments[i]); err != nil {
+		if err := applySalePayment(ctx, tx, sess, ts, &r.Payments[i]); err != nil {
 			return nil, err
 		}
 	}
@@ -1522,7 +1623,7 @@ func applySaleItem(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Ti
 		costPrice = *r.CostPrice
 	} else {
 		var costStr string
-		err := tx.QueryRow(ctx, `SELECT cost_price::text FROM batches WHERE id = $1`, r.BatchID).Scan(&costStr)
+		err := tx.QueryRow(ctx, `SELECT cost_price::text FROM batches WHERE id = $1 AND store_id = $2`, r.BatchID, sess.StoreID).Scan(&costStr)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "batch_id not found for sale item")
 		}
@@ -1537,35 +1638,36 @@ func applySaleItem(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Ti
 
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO sale_items
-			(id, sale_order_id, batch_id, product_name, variant_name, quantity, cost_price, selling_price, total_price)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			(id, store_id, sale_order_id, batch_id, product_name, variant_name, quantity, cost_price, selling_price, total_price)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.SaleOrderID, r.BatchID, r.ProductName, r.VariantName, r.Quantity,
+		r.ID, sess.StoreID, r.SaleOrderID, r.BatchID, r.ProductName, r.VariantName, r.Quantity,
 		costPrice.String(), r.SellingPrice.String(), r.TotalPrice.String())
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 1 {
-		recomputeOrders[r.SaleOrderID] = struct{}{}
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "sale_items", r.ID)
 	}
+	recomputeOrders[r.SaleOrderID] = struct{}{}
 	return nil
 }
 
-func applySalePayment(ctx context.Context, tx pgx.Tx, ts time.Time, r *SalePaymentRecord) error {
+func applySalePayment(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *SalePaymentRecord) error {
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO sale_payments (id, sale_order_id, method, amount, transaction_ref)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO sale_payments (id, store_id, sale_order_id, method, amount, transaction_ref)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.SaleOrderID, r.Method, r.Amount.String(), r.TransactionRef)
+		r.ID, sess.StoreID, r.SaleOrderID, r.Method, r.Amount.String(), r.TransactionRef)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return nil
+		return checkSameStoreOrForbidden(ctx, tx, sess, "sale_payments", r.ID)
 	}
 
 	var shiftID *string
-	err = tx.QueryRow(ctx, `UPDATE sale_orders SET updated_at = GREATEST(COALESCE(updated_at, $2), $2) WHERE id = $1 RETURNING shift_id`, r.SaleOrderID, ts).Scan(&shiftID)
+	err = tx.QueryRow(ctx, `UPDATE sale_orders SET updated_at = GREATEST(COALESCE(updated_at, $2), $2) WHERE id = $1 AND store_id = $3 RETURNING shift_id`, r.SaleOrderID, ts, sess.StoreID).Scan(&shiftID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
@@ -1579,12 +1681,12 @@ func applySalePayment(ctx context.Context, tx pgx.Tx, ts time.Time, r *SalePayme
 		shiftTag, err = tx.Exec(ctx, `
 			UPDATE register_shifts
 			SET cash_sales = cash_sales + $2, expected_cash = expected_cash + $2, updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-			WHERE id = $1`, *shiftID, r.Amount.String(), ts)
+			WHERE id = $1 AND store_id = $4`, *shiftID, r.Amount.String(), ts, sess.StoreID)
 	case "FONEPAY_QR", "CARD":
 		shiftTag, err = tx.Exec(ctx, `
 			UPDATE register_shifts
 			SET digital_sales = digital_sales + $2, updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-			WHERE id = $1`, *shiftID, r.Amount.String(), ts)
+			WHERE id = $1 AND store_id = $4`, *shiftID, r.Amount.String(), ts, sess.StoreID)
 	default:
 		return nil
 	}
@@ -1598,21 +1700,30 @@ func applySalePayment(ctx context.Context, tx pgx.Tx, ts time.Time, r *SalePayme
 }
 
 func applyRegisterShift(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, op string, r *RegisterShiftRecord) error {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, &r.OpenedByUserID, r.ClosedByUserID); err != nil {
+		return err
+	}
 	if op == OpInsert && r.Status == "OPEN" {
 		openedAt := derefTimeOr(r.OpenedAt, ts)
 		createdAt := derefTimeOr(r.CreatedAt, ts)
-		_, err := tx.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			INSERT INTO register_shifts
-				(id, opened_by_user_id, opened_at, opening_float, cash_sales, digital_sales,
+				(id, store_id, opened_by_user_id, opened_at, opening_float, cash_sales, digital_sales,
 				 khata_cash_repayments, cash_expenses, expected_cash, status, notes, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, 0.00, 0.00, 0.00, 0.00, $4, 'OPEN', $5, $6, $7)
+			VALUES ($1, $2, $3, $4, $5, 0.00, 0.00, 0.00, 0.00, $5, 'OPEN', $6, $7, $8)
 			ON CONFLICT (id) DO NOTHING`,
-			r.ID, r.OpenedByUserID, openedAt, r.OpeningFloat.String(), r.Notes, createdAt, ts)
-		return err
+			r.ID, sess.StoreID, r.OpenedByUserID, openedAt, r.OpeningFloat.String(), r.Notes, createdAt, ts)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return checkSameStoreOrForbidden(ctx, tx, sess, "register_shifts", r.ID)
+		}
+		return nil
 	}
 
 	var curStatus, expStr string
-	err := tx.QueryRow(ctx, `SELECT status, expected_cash::text FROM register_shifts WHERE id = $1 FOR UPDATE`, r.ID).Scan(&curStatus, &expStr)
+	err := tx.QueryRow(ctx, `SELECT status, expected_cash::text FROM register_shifts WHERE id = $1 AND store_id = $2 FOR UPDATE`, r.ID, sess.StoreID).Scan(&curStatus, &expStr)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "register_shift not found")
 	}
@@ -1657,36 +1768,45 @@ func applyRegisterShift(ctx context.Context, tx pgx.Tx, sess auth.Session, ts ti
 		    status = $8,
 		    notes = COALESCE($9, notes),
 		    updated_at = GREATEST(COALESCE(updated_at, $10), $10)
-		WHERE id = $1`,
+		WHERE id = $1 AND store_id = $11`,
 		r.ID, r.ClosedByUserID, closedAt, actualStr, discStr,
-		r.CashWithdrawnDeposit.String(), r.RetainedNextDayFloat.String(), r.Status, r.Notes, ts); err != nil {
+		r.CashWithdrawnDeposit.String(), r.RetainedNextDayFloat.String(), r.Status, r.Notes, ts, sess.StoreID); err != nil {
 		return err
 	}
 	if r.Status == "CLOSED" {
 		metaJSON, _ := json.Marshal(map[string]any{"shift_id": r.ID, "expected_cash": expectedCash.String()})
 		_, err = tx.Exec(ctx, `
-			INSERT INTO app_audit_logs (id, event_type, user_id, device_code, metadata)
-			VALUES ($1, 'ZREPORT_CLOSED', $2, $3, $4)`,
-			uuid.NewString(), sess.UserID, sess.DeviceCode, metaJSON)
+			INSERT INTO app_audit_logs (id, store_id, event_type, user_id, device_id, device_code, metadata)
+			VALUES ($1, $2, 'ZREPORT_CLOSED', $3, $4, $5, $6)`,
+			uuid.NewString(), sess.StoreID, sess.UserID, sess.DeviceID, sess.DeviceCode, metaJSON)
 		return err
 	}
 	return nil
 }
 
 func applyStaffShiftSession(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, op string, r *StaffShiftSessionRecord) error {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, &r.UserID, r.ForceClosedByUserID); err != nil {
+		return err
+	}
 	if op == OpInsert {
 		punchedIn := derefTimeOr(r.PunchedInAt, ts)
-		_, err := tx.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			INSERT INTO staff_shift_sessions
-				(id, register_shift_id, user_id, device_code, punched_in_at, punched_out_at, last_synced_at, status, force_closed_by_user_id, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $7)
+				(id, store_id, register_shift_id, user_id, device_id, device_code, punched_in_at, punched_out_at, last_synced_at, status, force_closed_by_user_id, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $9)
 			ON CONFLICT (id) DO NOTHING`,
-			r.ID, r.RegisterShiftID, r.UserID, r.DeviceCode, punchedIn, r.PunchedOutAt, ts, r.Status, r.ForceClosedByUserID)
-		return err
+			r.ID, sess.StoreID, r.RegisterShiftID, r.UserID, sess.DeviceID, sess.DeviceCode, punchedIn, r.PunchedOutAt, ts, r.Status, r.ForceClosedByUserID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return checkSameStoreOrForbidden(ctx, tx, sess, "staff_shift_sessions", r.ID)
+		}
+		return nil
 	}
 
 	var existingUserID string
-	err := tx.QueryRow(ctx, `SELECT user_id FROM staff_shift_sessions WHERE id = $1 FOR UPDATE`, r.ID).Scan(&existingUserID)
+	err := tx.QueryRow(ctx, `SELECT user_id FROM staff_shift_sessions WHERE id = $1 AND store_id = $2 FOR UPDATE`, r.ID, sess.StoreID).Scan(&existingUserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return newErr(http.StatusUnprocessableEntity, CodeUnprocessable, "staff_shift_session not found")
 	}
@@ -1708,39 +1828,45 @@ func applyStaffShiftSession(ctx context.Context, tx pgx.Tx, sess auth.Session, t
 		    status = $4,
 		    force_closed_by_user_id = COALESCE($5, force_closed_by_user_id),
 		    updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-		WHERE id = $1`,
-		r.ID, punchedOutAt, ts, r.Status, r.ForceClosedByUserID); err != nil {
+		WHERE id = $1 AND store_id = $6`,
+		r.ID, punchedOutAt, ts, r.Status, r.ForceClosedByUserID, sess.StoreID); err != nil {
 		return err
 	}
 	if r.Status == "FORCE_CLOSED" {
 		metaJSON, _ := json.Marshal(map[string]any{"session_id": r.ID, "target_user_id": existingUserID})
 		_, err = tx.Exec(ctx, `
-			INSERT INTO app_audit_logs (id, event_type, user_id, device_code, metadata)
-			VALUES ($1, 'FORCE_PUNCHOUT', $2, $3, $4)`,
-			uuid.NewString(), sess.UserID, sess.DeviceCode, metaJSON)
+			INSERT INTO app_audit_logs (id, store_id, event_type, user_id, device_id, device_code, metadata)
+			VALUES ($1, $2, 'FORCE_PUNCHOUT', $3, $4, $5, $6)`,
+			uuid.NewString(), sess.StoreID, sess.UserID, sess.DeviceID, sess.DeviceCode, metaJSON)
 		return err
 	}
 	return nil
 }
 
-func applyExpense(ctx context.Context, tx pgx.Tx, ts time.Time, r *ExpenseRecord) error {
+func applyExpense(ctx context.Context, tx pgx.Tx, sess auth.Session, ts time.Time, r *ExpenseRecord) error {
+	if err := requireStoreMember(ctx, tx, sess.StoreID, &r.CreatedByUserID); err != nil {
+		return err
+	}
 	createdAt := derefTimeOr(r.CreatedAt, ts)
 	tag, err := tx.Exec(ctx, `
 		INSERT INTO expenses
-			(id, category, title, amount, payment_method, paid_to, shift_id, created_by_user_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			(id, store_id, category, title, amount, payment_method, paid_to, shift_id, created_by_user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		ON CONFLICT (id) DO NOTHING`,
-		r.ID, r.Category, r.Title, r.Amount.String(), r.PaymentMethod, r.PaidTo, r.ShiftID, r.CreatedByUserID, createdAt, ts)
+		r.ID, sess.StoreID, r.Category, r.Title, r.Amount.String(), r.PaymentMethod, r.PaidTo, r.ShiftID, r.CreatedByUserID, createdAt, ts)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 1 && r.PaymentMethod == "CASH" && r.ShiftID != nil {
+	if tag.RowsAffected() == 0 {
+		return checkSameStoreOrForbidden(ctx, tx, sess, "expenses", r.ID)
+	}
+	if r.PaymentMethod == "CASH" && r.ShiftID != nil {
 		shiftTag, err := tx.Exec(ctx, `
 			UPDATE register_shifts
 			SET cash_expenses = cash_expenses + $2,
 			    expected_cash = expected_cash - $2,
 			    updated_at = GREATEST(COALESCE(updated_at, $3), $3)
-			WHERE id = $1`, *r.ShiftID, r.Amount.String(), ts)
+			WHERE id = $1 AND store_id = $4`, *r.ShiftID, r.Amount.String(), ts, sess.StoreID)
 		if err != nil {
 			return err
 		}
@@ -1859,6 +1985,8 @@ func mapPgError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
+		case "42501":
+			return newErr(http.StatusForbidden, CodeForbidden, "cross-tenant operation rejected")
 		case "23505":
 			return newErr(http.StatusConflict, CodeConflict, "conflicting unique constraint violation (e.g. duplicate bill_no or sticker_barcode)")
 		case "23503":

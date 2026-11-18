@@ -110,7 +110,7 @@ func (h *Handler) events(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hub := h.svc.Hub()
-	sub, subscribed := hub.Subscribe(sess.DeviceID, sess.DeviceCode)
+	sub, subscribed := hub.Subscribe(sess.StoreID, sess.DeviceID, sess.DeviceCode)
 	if !subscribed {
 		writeError(w, newErr(http.StatusServiceUnavailable, CodeTooManyConn, "sync event stream capacity reached or server shutting down"))
 		return

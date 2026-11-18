@@ -365,9 +365,31 @@ type InventorySyncAuditRecord struct {
 	UpdatedAt       *time.Time `json:"updated_at,omitempty"`
 }
 
+type StoreProfileRecord struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	PanNumber *string    `json:"pan_number,omitempty"`
+	Phone     *string    `json:"phone,omitempty"`
+	Address   *string    `json:"address,omitempty"`
+	Status    string     `json:"status"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+type StoreMemberRecord struct {
+	ID        string     `json:"id"`
+	UserID    string     `json:"user_id"`
+	Name      string     `json:"name"`
+	Username  string     `json:"username"`
+	Role      string     `json:"role"`
+	Status    string     `json:"status"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
 // ---------------------------------------------------------------- Pull DTOs
 
 type PullChanges struct {
+	Stores                []StoreProfileRecord         `json:"stores"`
+	StoreMembers          []StoreMemberRecord          `json:"store_members"`
 	Products              []ProductRecord              `json:"products"`
 	ProductVariants       []ProductVariantRecord       `json:"product_variants"`
 	Batches               []BatchRecord                `json:"batches"`
@@ -390,6 +412,8 @@ type PullChanges struct {
 
 func newEmptyPullChanges() PullChanges {
 	return PullChanges{
+		Stores:                []StoreProfileRecord{},
+		StoreMembers:          []StoreMemberRecord{},
 		Products:              []ProductRecord{},
 		ProductVariants:       []ProductVariantRecord{},
 		Batches:               []BatchRecord{},

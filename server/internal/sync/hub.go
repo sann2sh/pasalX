@@ -6,7 +6,8 @@ import (
 )
 
 const (
-	defaultMaxSubscribers = 100
+	defaultMaxSubscribers = 200
+	defaultMaxPerStore    = 25
 	defaultMaxPerDevice   = 4
 	defaultKeepalive      = 25 * time.Second
 )
@@ -22,6 +23,8 @@ const (
 
 // BroadcastEvent is the tiny coalescible payload emitted over GET /api/sync/events.
 type BroadcastEvent struct {
+	StoreID          string    `json:"-"`
+	OriginDeviceID   string    `json:"origin_device_id,omitempty"`
 	OriginDeviceCode string    `json:"origin_device_code"`
 	ServerTime       time.Time `json:"server_time"`
 	HasDiscrepancy   bool      `json:"has_discrepancy,omitempty"`
@@ -30,6 +33,7 @@ type BroadcastEvent struct {
 // Subscriber represents one active SSE stream held by an authenticated mobile client.
 type Subscriber struct {
 	id         uint64
+	storeID    string
 	deviceID   string
 	deviceCode string
 	hub        *Hub
@@ -77,6 +81,9 @@ func (s *Subscriber) enqueue(ev BroadcastEvent) {
 		if ev.HasDiscrepancy {
 			s.pending.HasDiscrepancy = true
 		}
+		if s.pending.OriginDeviceID != ev.OriginDeviceID {
+			s.pending.OriginDeviceID = ev.OriginDeviceID
+		}
 		if s.pending.OriginDeviceCode != ev.OriginDeviceCode {
 			s.pending.OriginDeviceCode = ev.OriginDeviceCode
 		}
@@ -92,12 +99,14 @@ func (s *Subscriber) enqueue(ev BroadcastEvent) {
 func (s *Subscriber) markRevoked()  { s.onceRev.Do(func() { close(s.revokeCh) }) }
 func (s *Subscriber) markReplaced() { s.onceRep.Do(func() { close(s.replacedCh) }) }
 
-// Hub maintains active shop floor SSE listeners with bounded memory (<1 MB for 50 clients).
+// Hub maintains active SSE listeners partitioned strictly by store_id.
 type Hub struct {
 	mu             sync.RWMutex
-	subs           map[uint64]*Subscriber
+	byStore        map[string]map[uint64]*Subscriber
+	totalCount     int
 	nextID         uint64
 	maxSubscribers int
+	maxPerStore    int
 	maxPerDevice   int
 	keepalive      time.Duration
 	done           chan struct{}
@@ -107,8 +116,9 @@ type Hub struct {
 // NewHub constructs an SSE broadcaster.
 func NewHub() *Hub {
 	return &Hub{
-		subs:           make(map[uint64]*Subscriber, 16),
+		byStore:        make(map[string]map[uint64]*Subscriber, 8),
 		maxSubscribers: defaultMaxSubscribers,
+		maxPerStore:    defaultMaxPerStore,
 		maxPerDevice:   defaultMaxPerDevice,
 		keepalive:      defaultKeepalive,
 		done:           make(chan struct{}),
@@ -123,16 +133,18 @@ func (h *Hub) Shutdown() {
 // Done is closed when Shutdown is invoked.
 func (h *Hub) Done() <-chan struct{} { return h.done }
 
-// ActiveCount reports current active SSE listener count.
+// ActiveCount reports current active SSE listener count across all stores.
 func (h *Hub) ActiveCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return len(h.subs)
+	return h.totalCount
 }
 
-// Subscribe registers an SSE stream for (deviceID, deviceCode). Returns nil if the
-// server is shutting down or has reached maxSubscribers.
-func (h *Hub) Subscribe(deviceID, deviceCode string) (*Subscriber, bool) {
+// Subscribe registers an SSE stream for (storeID, deviceID, deviceCode).
+func (h *Hub) Subscribe(storeID, deviceID, deviceCode string) (*Subscriber, bool) {
+	if storeID == "" || deviceID == "" {
+		return nil, false
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -142,9 +154,15 @@ func (h *Hub) Subscribe(deviceID, deviceCode string) (*Subscriber, bool) {
 	default:
 	}
 
+	storeSubs := h.byStore[storeID]
+	if storeSubs == nil {
+		storeSubs = make(map[uint64]*Subscriber, 4)
+		h.byStore[storeID] = storeSubs
+	}
+
 	// Reap oldest connection for this same device if stale reconnects accumulate.
 	var deviceSubs []*Subscriber
-	for _, sub := range h.subs {
+	for _, sub := range storeSubs {
 		if sub.deviceID == deviceID {
 			deviceSubs = append(deviceSubs, sub)
 		}
@@ -156,17 +174,19 @@ func (h *Hub) Subscribe(deviceID, deviceCode string) (*Subscriber, bool) {
 				oldest = sub
 			}
 		}
-		delete(h.subs, oldest.id)
+		delete(storeSubs, oldest.id)
+		h.totalCount--
 		oldest.markReplaced()
 	}
 
-	if len(h.subs) >= h.maxSubscribers {
+	if len(storeSubs) >= h.maxPerStore || h.totalCount >= h.maxSubscribers {
 		return nil, false
 	}
 
 	h.nextID++
 	sub := &Subscriber{
 		id:         h.nextID,
+		storeID:    storeID,
 		deviceID:   deviceID,
 		deviceCode: deviceCode,
 		hub:        h,
@@ -174,7 +194,8 @@ func (h *Hub) Subscribe(deviceID, deviceCode string) (*Subscriber, bool) {
 		revokeCh:   make(chan struct{}),
 		replacedCh: make(chan struct{}),
 	}
-	h.subs[sub.id] = sub
+	storeSubs[sub.id] = sub
+	h.totalCount++
 	return sub, true
 }
 
@@ -184,19 +205,29 @@ func (h *Hub) Unsubscribe(sub *Subscriber) {
 		return
 	}
 	h.mu.Lock()
-	if cur, ok := h.subs[sub.id]; ok && cur == sub {
-		delete(h.subs, sub.id)
+	if storeSubs := h.byStore[sub.storeID]; storeSubs != nil {
+		if cur, ok := storeSubs[sub.id]; ok && cur == sub {
+			delete(storeSubs, sub.id)
+			h.totalCount--
+			if len(storeSubs) == 0 {
+				delete(h.byStore, sub.storeID)
+			}
+		}
 	}
 	h.mu.Unlock()
 }
 
-// BroadcastDataChanged fans out a lightweight DATA_CHANGED wakeup ping to all
-// active shop phones other than the originating deviceCode.
+// BroadcastDataChanged fans out a lightweight DATA_CHANGED wakeup ping strictly
+// within ev.StoreID, excluding the originating deviceID.
 func (h *Hub) BroadcastDataChanged(ev BroadcastEvent) int {
+	if ev.StoreID == "" {
+		return 0
+	}
 	h.mu.RLock()
-	targets := make([]*Subscriber, 0, len(h.subs))
-	for _, sub := range h.subs {
-		if ev.OriginDeviceCode != "" && sub.deviceCode == ev.OriginDeviceCode {
+	storeSubs := h.byStore[ev.StoreID]
+	targets := make([]*Subscriber, 0, len(storeSubs))
+	for _, sub := range storeSubs {
+		if ev.OriginDeviceID != "" && sub.deviceID == ev.OriginDeviceID {
 			continue
 		}
 		targets = append(targets, sub)
@@ -209,14 +240,20 @@ func (h *Hub) BroadcastDataChanged(ev BroadcastEvent) int {
 	return len(targets)
 }
 
-// RevokeDevice notifies and disconnects all live SSE streams belonging to deviceID.
-func (h *Hub) RevokeDevice(deviceID string) {
+// RevokeDevice notifies and disconnects all live SSE streams belonging to (storeID, deviceID).
+func (h *Hub) RevokeDevice(storeID, deviceID string) {
 	h.mu.Lock()
 	var killed []*Subscriber
-	for id, sub := range h.subs {
-		if sub.deviceID == deviceID {
-			delete(h.subs, id)
-			killed = append(killed, sub)
+	if storeSubs := h.byStore[storeID]; storeSubs != nil {
+		for id, sub := range storeSubs {
+			if sub.deviceID == deviceID {
+				delete(storeSubs, id)
+				h.totalCount--
+				killed = append(killed, sub)
+			}
+		}
+		if len(storeSubs) == 0 {
+			delete(h.byStore, storeID)
 		}
 	}
 	h.mu.Unlock()
@@ -225,4 +262,3 @@ func (h *Hub) RevokeDevice(deviceID string) {
 		sub.markRevoked()
 	}
 }
-

@@ -115,7 +115,7 @@ func newTestEnv(t *testing.T) *testEnv {
 			supplier_payments, purchase_invoice_items, purchase_invoices, suppliers,
 			customer_transactions, customer_shade_profiles, customers,
 			batches, product_variants, products,
-			app_audit_logs, device_registrations, users RESTART IDENTITY CASCADE`)
+			app_audit_logs, device_registrations, store_invitations, store_memberships, stores, users RESTART IDENTITY CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate tables: %v", err)
 	}
@@ -126,8 +126,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	authSvc := auth.NewService(testPool, keys)
 	hub := psync.NewHub()
-	authSvc.SetOnDeviceRevoked(func(deviceID, _ string) {
-		hub.RevokeDevice(deviceID)
+	authSvc.SetOnDeviceRevoked(func(storeID, deviceID, _ string) {
+		hub.RevokeDevice(storeID, deviceID)
 	})
 	syncSvc := psync.NewService(testPool, hub)
 
@@ -142,17 +142,27 @@ func newTestEnv(t *testing.T) *testEnv {
 		srv.Close()
 	})
 
-	ownerU, err := authSvc.CreateUser(ctx, "OwnerDidi", "owner", "OwnerPass!2026", "111111", auth.RoleOwner)
+	ownerU, err := authSvc.CreateUser(ctx, "OwnerDidi", "owner@test.local", "owner", "OwnerPass!2026", "111111")
 	if err != nil {
 		t.Fatalf("create owner: %v", err)
 	}
-	mgrU, err := authSvc.CreateUser(ctx, "ManagerDai", "manager", "ManagerPass!2026", "222222", auth.RoleManager)
+	storeID, err := authSvc.CreateStoreWithOwner(ctx, ownerU.ID, "Test Store")
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	mgrU, err := authSvc.CreateUser(ctx, "ManagerDai", "manager@test.local", "manager", "ManagerPass!2026", "222222")
 	if err != nil {
 		t.Fatalf("create manager: %v", err)
 	}
-	staffU, err := authSvc.CreateUser(ctx, "StaffMaya", "maya", "StaffPass!2026", "333333", auth.RoleStaff)
+	if err := authSvc.AddStoreMember(ctx, storeID, mgrU.ID, auth.RoleManager); err != nil {
+		t.Fatalf("add manager member: %v", err)
+	}
+	staffU, err := authSvc.CreateUser(ctx, "StaffMaya", "maya@test.local", "maya", "StaffPass!2026", "333333")
 	if err != nil {
 		t.Fatalf("create staff: %v", err)
+	}
+	if err := authSvc.AddStoreMember(ctx, storeID, staffU.ID, auth.RoleStaff); err != nil {
+		t.Fatalf("add staff member: %v", err)
 	}
 
 	dev01, err := authSvc.RegisterDevice(ctx, auth.RegisterDeviceInput{
@@ -904,13 +914,15 @@ func TestSSEEventsLatencyMemoryFootprintAndKillSwitch(t *testing.T) {
 
 	subs := make([]*psync.Subscriber, 50)
 	for i := 0; i < 50; i++ {
-		s, ok := hub.Subscribe(fmt.Sprintf("dev-%02d", i), fmt.Sprintf("%02d", i+10))
+		s, ok := hub.Subscribe(fmt.Sprintf("store-%d", i/10), fmt.Sprintf("dev-%02d", i), fmt.Sprintf("%02d", i+10))
 		if !ok {
 			t.Fatalf("Subscribe %d failed", i)
 		}
 		subs[i] = s
 	}
 	hub.BroadcastDataChanged(psync.BroadcastEvent{
+		StoreID:          "store-0",
+		OriginDeviceID:   "dev-00",
 		OriginDeviceCode: "01",
 		ServerTime:       time.Now().UTC(),
 	})
@@ -1105,17 +1117,17 @@ func TestPostReviewSecurityAndIntegrityHardening(t *testing.T) {
 	tLater := tSame.Add(10 * time.Microsecond)
 	for i := 0; i < 120; i++ {
 		if _, err := testPool.Exec(context.Background(), `
-			INSERT INTO products (id, name, brand, category, is_generic, created_at, updated_at)
-			VALUES ($1, $2, 'BulkBrand', 'Lips', FALSE, $3, $3)`,
-			uuid.NewString(), fmt.Sprintf("Bulk-%03d", i), tSame); err != nil {
+			INSERT INTO products (id, store_id, name, brand, category, is_generic, created_at, updated_at)
+			VALUES ($1, $2, $3, 'BulkBrand', 'Lips', FALSE, $4, $4)`,
+			uuid.NewString(), env.ownerSess.Device.StoreID, fmt.Sprintf("Bulk-%03d", i), tSame); err != nil {
 			t.Fatalf("seed same-microsecond product %d: %v", i, err)
 		}
 	}
 	for i := 0; i < 5; i++ {
 		if _, err := testPool.Exec(context.Background(), `
-			INSERT INTO products (id, name, brand, category, is_generic, created_at, updated_at)
-			VALUES ($1, $2, 'LaterBrand', 'Lips', FALSE, $3, $3)`,
-			uuid.NewString(), fmt.Sprintf("Later-%03d", i), tLater); err != nil {
+			INSERT INTO products (id, store_id, name, brand, category, is_generic, created_at, updated_at)
+			VALUES ($1, $2, $3, 'LaterBrand', 'Lips', FALSE, $4, $4)`,
+			uuid.NewString(), env.ownerSess.Device.StoreID, fmt.Sprintf("Later-%03d", i), tLater); err != nil {
 			t.Fatalf("seed later product %d: %v", i, err)
 		}
 	}
