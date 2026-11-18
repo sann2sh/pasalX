@@ -88,7 +88,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               storePhone: result.phone.trim(),
             ),
           );
-      ref.read(pasalAlertProvider).showSuccess('Shop profile updated.');
+      final token = ref.read(activeAccessTokenProvider);
+      if (token != null && token.isNotEmpty) {
+        try {
+          await ref.read(pasalApiClientProvider).updateCurrentStore(
+                accessToken: token,
+                name: storeName,
+                panNumber: result.pan.trim(),
+                phone: result.phone.trim(),
+              );
+        } catch (_) {
+          // Best-effort server sync; local Drift/metadata updated immediately.
+        }
+      }
+      if (mounted) {
+        ref.read(pasalAlertProvider).showSuccess('Shop profile updated.');
+      }
+    }
+  }
+
+  Future<void> _handleLeaveStore() async {
+    final authCtrl = ref.read(authSessionControllerProvider);
+    final res = await authCtrl.leaveStoreSafely(discardUnsynced: false);
+    if (!mounted) return;
+    if (res.left) {
+      ref.read(pasalAlertProvider).showSuccess('Left store safely.');
+      return;
+    }
+    if (res.unsyncedCount > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => _LeaveUnsyncedConfirmDialog(
+          unsyncedCount: res.unsyncedCount,
+        ),
+      );
+      if (confirmed == true && mounted) {
+        final forced = await authCtrl.leaveStoreSafely(discardUnsynced: true);
+        if (!mounted) return;
+        if (!forced.left && forced.error != null) {
+          ref.read(pasalAlertProvider).showError(forced.error!);
+        }
+      }
+      return;
+    }
+    if (res.error != null) {
+      ref.read(pasalAlertProvider).showError(res.error!);
     }
   }
 
@@ -312,6 +356,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   icon: Icons.receipt_long_rounded,
                   title: 'Past Bills & Expenses',
                   onTap: () => context.go(AppRoutes.history),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          // 3b. Account & Store Membership
+          PasalCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('TEAM & ACCOUNT', style: t.labelMedium),
+                const SizedBox(height: AppSpacing.xs),
+                if (isOwner) ...[
+                  _SettingsNavRow(
+                    icon: Icons.group_outlined,
+                    title: 'Team & Devices',
+                    subtitle: 'Invites · Approvals · Roles',
+                    onTap: () => context.push(AppRoutes.settingsTeam),
+                  ),
+                  const Divider(height: 1),
+                ],
+                if (!isOwner) ...[
+                  _SettingsNavRow(
+                    icon: Icons.exit_to_app_rounded,
+                    title: 'Leave Store',
+                    subtitle: 'Wipe local data & join another store',
+                    onTap: _handleLeaveStore,
+                  ),
+                  const Divider(height: 1),
+                ],
+                _SettingsNavRow(
+                  icon: Icons.manage_accounts_outlined,
+                  title: 'Account & Deletion',
+                  onTap: () => context.push(AppRoutes.settingsAccount),
                 ),
               ],
             ),
@@ -661,6 +740,68 @@ class _RevokeDeviceDialogState extends State<_RevokeDeviceDialog> {
           style: FilledButton.styleFrom(backgroundColor: c.error),
           onPressed: () => Navigator.of(context).pop(_reasonCtrl.text.trim()),
           child: const Text('Revoke Access'),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeaveUnsyncedConfirmDialog extends StatefulWidget {
+  const _LeaveUnsyncedConfirmDialog({required this.unsyncedCount});
+
+  final int unsyncedCount;
+
+  @override
+  State<_LeaveUnsyncedConfirmDialog> createState() =>
+      _LeaveUnsyncedConfirmDialogState();
+}
+
+class _LeaveUnsyncedConfirmDialogState
+    extends State<_LeaveUnsyncedConfirmDialog> {
+  final _confirmCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pasalColors;
+    final matches = _confirmCtrl.text.trim().toUpperCase() == 'LEAVE';
+    return AlertDialog(
+      title: const Text('Unsynced Changes Will Be Lost'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.unsyncedCount} unsynced sales or changes on this phone have not been backed up yet and will be permanently lost if you leave now.',
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          TextField(
+            controller: _confirmCtrl,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Type LEAVE to confirm',
+              hintText: 'LEAVE',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: c.error,
+            foregroundColor: c.onError,
+          ),
+          onPressed: matches ? () => Navigator.pop(context, true) : null,
+          child: const Text('Discard & Leave'),
         ),
       ],
     );

@@ -16,10 +16,17 @@ import 'package:pasalx_mobile/core/database/app_database.dart';
 import 'package:pasalx_mobile/core/database/sqlcipher_factory.dart';
 import 'package:pasalx_mobile/core/network/api_config.dart';
 import 'package:pasalx_mobile/core/providers/foundation_providers.dart';
+import 'package:pasalx_mobile/core/security/device_credentials_store.dart';
 import 'package:pasalx_mobile/core/security/envelope_crypto.dart';
 import 'package:pasalx_mobile/core/security/keystore_dek_manager.dart';
 import 'package:pasalx_mobile/core/security/ram_key_holder.dart';
 import 'package:pasalx_mobile/features/auth/application/auth_session_controller.dart';
+
+String _fakeJwtWithSid(String sid) {
+  final hdr = base64Url.encode(utf8.encode('{"alg":"HS256","typ":"JWT"}')).replaceAll('=', '');
+  final pay = base64Url.encode(utf8.encode('{"sid":"$sid","aud":"pasalx-device"}')).replaceAll('=', '');
+  return '$hdr.$pay.sig';
+}
 
 /// Mints a genuine Go-compatible 64-byte `PX\x01\x00` envelope for tests.
 Future<({Uint8List kek, Uint8List envelope})> _mintGoCompatibleLease({
@@ -121,6 +128,7 @@ void main() {
                 jsonEncode({
                   'device': {
                     'id': deviceId,
+                    'store_id': 'store-1',
                     'code': '01',
                     'name': 'Counter Phone 01',
                     'platform': 'ANDROID',
@@ -141,7 +149,7 @@ void main() {
               );
               return http.Response(
                 jsonEncode({
-                  'access_token': 'jwt-staff-01',
+                  'access_token': _fakeJwtWithSid('store-1'),
                   'token_type': 'Bearer',
                   'expires_at': expiresAt.toIso8601String(),
                   'user': {
@@ -152,6 +160,7 @@ void main() {
                   },
                   'device': {
                     'id': deviceId,
+                    'store_id': 'store-1',
                     'code': '01',
                     'name': 'Counter Phone 01',
                     'platform': 'ANDROID',
@@ -254,7 +263,7 @@ void main() {
       final c1 = createAppContainer();
       final auth1 = c1.read(authSessionControllerProvider);
       await auth1.initialize();
-      expect(auth1.state.stage, AuthGateStage.unregistered);
+      expect(auth1.state.stage, AuthGateStage.accountAuthRequired);
 
       final regOk = await auth1.registerTerminal(
         ownerUsername: 'owner',
@@ -398,6 +407,7 @@ void main() {
             jsonEncode({
               'device': {
                 'id': deviceId,
+                'store_id': 'store-1',
                 'code': '02',
                 'name': 'Counter Phone 02',
                 'platform': 'ANDROID',
@@ -418,7 +428,7 @@ void main() {
           );
           return http.Response(
             jsonEncode({
-              'access_token': 'jwt-02',
+              'access_token': _fakeJwtWithSid('store-1'),
               'token_type': 'Bearer',
               'expires_at': exp.toIso8601String(),
               'user': {
@@ -429,6 +439,7 @@ void main() {
               },
               'device': {
                 'id': deviceId,
+                'store_id': 'store-1',
                 'code': '02',
                 'name': 'Counter Phone 02',
                 'platform': 'ANDROID',
@@ -564,7 +575,7 @@ void main() {
           );
           return http.Response(
             jsonEncode({
-              'access_token': 'jwt-ui-01',
+              'access_token': _fakeJwtWithSid('store-1'),
               'token_type': 'Bearer',
               'expires_at': exp.toIso8601String(),
               'user': {
@@ -575,6 +586,7 @@ void main() {
               },
               'device': {
                 'id': deviceId,
+                'store_id': 'store-1',
                 'code': '01',
                 'name': 'Counter Phone 01',
                 'platform': 'ANDROID',
@@ -633,6 +645,16 @@ void main() {
       );
       addTearDown(container.dispose);
 
+      await container.read(deviceCredentialsStoreProvider).saveDevice(
+            const EnrolledDeviceInfo(
+              deviceId: deviceId,
+              storeId: 'store-1',
+              deviceCode: '01',
+              deviceName: 'Counter Phone 01',
+              platform: 'ANDROID',
+            ),
+          );
+
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -641,20 +663,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 1. Terminal enrollment card renders cleanly (no Server URL or platform chips).
-      expect(find.text('Terminal Enrollment'), findsOneWidget);
-      expect(find.text('ANDROID'), findsNothing);
-      expect(find.text('IOS'), findsNothing);
-      expect(find.text('LINUX'), findsNothing);
-      expect(find.textContaining('Server URL'), findsNothing);
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Owner Password'),
-        'OwnerPass123',
-      );
-      await tester.tap(find.text('Enroll Shop Terminal'));
-      await tester.pumpAndSettle();
-
-      // 2. Online 6-digit PIN keypad login (6 dots, no mode ChoiceChips).
+      // 1. Online 6-digit PIN keypad login (6 dots, no mode ChoiceChips).
       expect(find.text('Morning Shift Login'), findsOneWidget);
       for (var i = 0; i < 6; i++) {
         expect(find.byKey(ValueKey<String>('pin-dot-$i')), findsOneWidget);

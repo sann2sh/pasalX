@@ -13,6 +13,8 @@ part 'app_database.g.dart';
 /// (`TECHNICAL_SPEC.md` §4 & server migrations `000001`–`000004`).
 @DriftDatabase(
   tables: [
+    Stores,
+    StoreMembers,
     Users,
     Customers,
     CustomerShadeProfiles,
@@ -65,13 +67,22 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
           await m.createAll();
           await _createIndexes();
+        },
+        onUpgrade: (Migrator m, int from, int to) async {
+          if (from < 2) {
+            await m.createTable(stores);
+            await m.createTable(storeMembers);
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_store_members_user ON store_members(user_id);',
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON;');
@@ -106,6 +117,7 @@ class AppDatabase extends _$AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_sync_audit_discrepancy ON inventory_sync_audit(is_discrepancy);',
       'CREATE INDEX IF NOT EXISTS idx_outbox_status ON sync_outbox(status);',
       'CREATE INDEX IF NOT EXISTS idx_outbox_created ON sync_outbox(created_at);',
+      'CREATE INDEX IF NOT EXISTS idx_store_members_user ON store_members(user_id);',
     ];
     for (final sql in indexStatements) {
       await customStatement(sql);
@@ -756,6 +768,30 @@ class AppDatabase extends _$AppDatabase {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
     });
+  }
+
+  /// Returns the synced store profile (for offline receipts & Settings), if any.
+  Future<StoreRow?> fetchActiveStoreProfile() {
+    return (select(stores)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+          ..limit(1))
+        .getSingleOrNull();
+  }
+
+  /// Streams the synced store profile for reactive Settings / Receipt config.
+  Stream<StoreRow?> watchActiveStoreProfile() {
+    return (select(stores)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])
+          ..limit(1))
+        .watchSingleOrNull();
+  }
+
+  /// Counts unsynced outbox items (`PENDING` or `FAILED`) before Leave Store.
+  Future<int> countUnsyncedOutboxMutations() async {
+    final rows = await (select(syncOutbox)
+          ..where((t) => t.status.isIn(const ['PENDING', 'FAILED'])))
+        .get();
+    return rows.length;
   }
 }
 

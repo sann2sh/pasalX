@@ -9,9 +9,27 @@ class ApiConfig {
     this.sseConnectTimeout = const Duration(seconds: 15),
   });
 
-  /// Default API base URL (localhost for desktop/loopback; configurable to
-  /// `http://10.0.2.2:8080` or the shop's GCP Cloud Run / VM HTTPS endpoint).
-  static const String defaultBaseUrl = 'http://127.0.0.1:8080';
+  /// Default API base URL configurable at build time via
+  /// `--dart-define=PASALX_API_URL=...`, defaulting to the live production host.
+  static const String defaultBaseUrl = String.fromEnvironment(
+    'PASALX_API_URL',
+    defaultValue: 'https://pasalx.skisub.com',
+  );
+
+  /// Validates [url] as an API base URL. In release builds (`kReleaseMode`),
+  /// non-HTTPS URLs are rejected to prevent cleartext credential/data leakage.
+  static bool isValidBaseUrl(String url, {bool? requireHttps}) {
+    final trimmed = url.trim();
+    final parsed = Uri.tryParse(trimmed);
+    if (parsed == null || parsed.host.isEmpty) {
+      return false;
+    }
+    final enforceHttps = requireHttps ?? kReleaseMode;
+    if (enforceHttps) {
+      return parsed.isScheme('https');
+    }
+    return parsed.isScheme('http') || parsed.isScheme('https');
+  }
 
   final String baseUrl;
   final Duration requestTimeout;

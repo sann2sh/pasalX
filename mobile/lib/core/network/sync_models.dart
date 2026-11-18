@@ -165,6 +165,8 @@ class SyncPullResult {
 @immutable
 class SyncPullChanges {
   const SyncPullChanges({
+    this.stores = const [],
+    this.storeMembers = const [],
     required this.products,
     required this.productVariants,
     required this.batches,
@@ -187,6 +189,9 @@ class SyncPullChanges {
 
   factory SyncPullChanges.fromJson(Map<String, dynamic> json) {
     return SyncPullChanges(
+      stores: _decodeList(json['stores'], PullStoreProfile.fromJson),
+      storeMembers:
+          _decodeList(json['store_members'], PullStoreMember.fromJson),
       products: _decodeList(json['products'], PullProduct.fromJson),
       productVariants:
           _decodeList(json['product_variants'], PullProductVariant.fromJson),
@@ -229,6 +234,8 @@ class SyncPullChanges {
     );
   }
 
+  final List<PullStoreProfile> stores;
+  final List<PullStoreMember> storeMembers;
   final List<PullProduct> products;
   final List<PullProductVariant> productVariants;
   final List<PullBatch> batches;
@@ -249,6 +256,8 @@ class SyncPullChanges {
   final List<PullInventorySyncAudit> inventorySyncAudit;
 
   int get totalRecordCount =>
+      stores.length +
+      storeMembers.length +
       products.length +
       productVariants.length +
       batches.length +
@@ -1053,6 +1062,72 @@ class PullInventorySyncAudit {
   final String? referenceId;
   final String? stockMovementId;
   final DateTime? createdAt;
+  final DateTime? updatedAt;
+}
+
+@immutable
+class PullStoreProfile {
+  const PullStoreProfile({
+    required this.id,
+    required this.name,
+    this.panNumber,
+    this.phone,
+    this.address,
+    required this.status,
+    this.updatedAt,
+  });
+
+  factory PullStoreProfile.fromJson(Map<String, dynamic> json) {
+    return PullStoreProfile(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      panNumber: json['pan_number'] as String?,
+      phone: json['phone'] as String?,
+      address: json['address'] as String?,
+      status: json['status'] as String? ?? 'ACTIVE',
+      updatedAt: _dt(json['updated_at']),
+    );
+  }
+
+  final String id;
+  final String name;
+  final String? panNumber;
+  final String? phone;
+  final String? address;
+  final String status;
+  final DateTime? updatedAt;
+}
+
+@immutable
+class PullStoreMember {
+  const PullStoreMember({
+    required this.id,
+    required this.userId,
+    required this.name,
+    required this.username,
+    required this.role,
+    required this.status,
+    this.updatedAt,
+  });
+
+  factory PullStoreMember.fromJson(Map<String, dynamic> json) {
+    return PullStoreMember(
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      name: json['name'] as String,
+      username: json['username'] as String,
+      role: json['role'] as String,
+      status: json['status'] as String,
+      updatedAt: _dt(json['updated_at']),
+    );
+  }
+
+  final String id;
+  final String userId;
+  final String name;
+  final String username;
+  final String role;
+  final String status;
   final DateTime? updatedAt;
 }
 

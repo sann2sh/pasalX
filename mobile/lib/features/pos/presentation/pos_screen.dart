@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/pasal_widgets.dart';
 import '../../inventory/presentation/barcode_scanner_sheet.dart';
+import '../application/pos_beep.dart';
 import '../application/pos_providers.dart';
 import '../domain/pos_models.dart';
 import 'checkout_sheet.dart';
@@ -75,6 +78,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
         case PosBatchScanStatus.ok:
           final batch = lookup.scannedBatch!;
           HapticFeedback.lightImpact();
+          unawaited(PosBeep.playSuccess());
           ref.read(posCartProvider.notifier).addBatch(batch);
           break;
 
@@ -89,6 +93,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
             older: lookup.olderFefoBatch!,
           );
           if (chosen != null && mounted) {
+            HapticFeedback.lightImpact();
+            unawaited(PosBeep.playSuccess());
             ref.read(posCartProvider.notifier).addBatch(chosen);
           }
           break;

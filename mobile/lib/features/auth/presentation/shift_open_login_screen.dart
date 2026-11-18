@@ -41,7 +41,16 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
   _LoginInputMode _loginMode = _LoginInputMode.onlinePin;
   int _selectedPresetRs = 5000;
   bool _floatUserEdited = false;
+  bool _editingUsername = false;
   String? _seededFromShiftId;
+
+  String _savedUsernameFor(AuthSessionState s) {
+    final candidate = s.enrolledDevice?.lastUsername ??
+        s.accountSession?.username ??
+        s.offlineRecovery.username ??
+        '';
+    return candidate.trim();
+  }
 
   static String _defaultPlatform() {
     if (Platform.isIOS) return 'IOS';
@@ -162,7 +171,10 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
       return;
     }
 
-    final username = _usernameController.text.trim();
+    final savedUsername = _savedUsernameFor(ctrl.state);
+    final username = (savedUsername.isNotEmpty && !_editingUsername)
+        ? savedUsername
+        : _usernameController.text.trim();
     if (username.isEmpty) {
       ref
           .read(pasalAlertProvider)
@@ -262,13 +274,17 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
                             ),
                           AuthGateStage.revoked =>
                             _buildRevokedCard(context, authCtrl, s),
-                          AuthGateStage.unregistered =>
-                            _buildEnrollTerminalCard(context, s),
                           AuthGateStage.locked =>
                             _buildLoginCard(context, s),
                           AuthGateStage.shiftOpenRequired =>
                             _buildShiftOpenView(context, authCtrl, s),
                           AuthGateStage.ready => const SizedBox.shrink(),
+                          AuthGateStage.accountAuthRequired ||
+                          AuthGateStage.emailVerificationRequired ||
+                          AuthGateStage.storeSetupRequired ||
+                          AuthGateStage.deviceApprovalPending ||
+                          AuthGateStage.deviceRejected =>
+                            _buildEnrollTerminalCard(context, s),
                         },
                       ],
                     ),
@@ -288,7 +304,11 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
     final deviceCode = s.enrolledDevice?.deviceCode;
     final subtitle = switch (s.stage) {
       AuthGateStage.initializing => 'STARTING UP',
-      AuthGateStage.unregistered => 'OWNER ACTIVATION',
+      AuthGateStage.accountAuthRequired => 'ACCOUNT SIGN-IN',
+      AuthGateStage.emailVerificationRequired => 'VERIFY EMAIL',
+      AuthGateStage.storeSetupRequired => 'STORE SETUP',
+      AuthGateStage.deviceApprovalPending => 'PENDING APPROVAL',
+      AuthGateStage.deviceRejected => 'DEVICE REJECTED',
       AuthGateStage.locked => 'STAFF SIGN-IN',
       AuthGateStage.shiftOpenRequired => 'OPENING CASH & DETAILS',
       AuthGateStage.ready => 'SHIFT ACTIVE',
@@ -587,15 +607,77 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (effectiveMode != _LoginInputMode.offlineRecovery) ...[
-                TextField(
-                  controller: _usernameController,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Staff Username',
-                    hintText: 'sunita',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
+                if (_savedUsernameFor(s).isNotEmpty && !_editingUsername) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.surfaceContainerHigh.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(AppRadii.md),
+                      border: Border.all(
+                        color: c.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.person_outline_rounded,
+                          size: 20,
+                          color: c.primary,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Signed-in User', style: t.labelSmall),
+                              Text(
+                                '@${_savedUsernameFor(s)}',
+                                style: t.titleMedium,
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: s.busy
+                              ? null
+                              : () {
+                                  _usernameController.text =
+                                      _savedUsernameFor(s);
+                                  setState(() {
+                                    _editingUsername = true;
+                                    _enteredPin = '';
+                                  });
+                                },
+                          child: const Text('Switch user'),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                ] else ...[
+                  TextField(
+                    controller: _usernameController,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Staff Username',
+                      hintText: 'sunita',
+                      prefixIcon: const Icon(Icons.person_outline_rounded),
+                      suffixIcon: _savedUsernameFor(s).isNotEmpty
+                          ? TextButton(
+                              onPressed: s.busy
+                                  ? null
+                                  : () => setState(() {
+                                        _editingUsername = false;
+                                        _enteredPin = '';
+                                      }),
+                              child: const Text('Use saved'),
+                            )
+                          : null,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.md),
               ],
               if (effectiveMode == _LoginInputMode.onlinePassword) ...[

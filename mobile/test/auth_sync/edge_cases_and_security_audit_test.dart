@@ -216,7 +216,8 @@ void main() {
           );
           return http.Response(
             jsonEncode({
-              'access_token': 'jwt-$loginUser',
+              'access_token':
+                  '${base64Url.encode(utf8.encode('{"alg":"HS256"}')).replaceAll('=', '')}.${base64Url.encode(utf8.encode('{"sid":"store-1"}')).replaceAll('=', '')}.sig',
               'token_type': 'Bearer',
               'expires_at': exp.toIso8601String(),
               'user': {
@@ -227,6 +228,7 @@ void main() {
               },
               'device': {
                 'id': deviceId,
+                'store_id': 'store-1',
                 'code': '01',
                 'name': 'Counter 01',
                 'platform': 'ANDROID',
@@ -288,6 +290,7 @@ void main() {
       await container.read(deviceCredentialsStoreProvider).saveDevice(
             const EnrolledDeviceInfo(
               deviceId: deviceId,
+              storeId: 'store-1',
               deviceCode: '01',
               deviceName: 'Counter 01',
               platform: 'ANDROID',
@@ -533,6 +536,7 @@ void main() {
       await container.read(deviceCredentialsStoreProvider).saveDevice(
             const EnrolledDeviceInfo(
               deviceId: 'dev-ui-offline',
+              storeId: 'store-1',
               deviceCode: '01',
               deviceName: 'Counter Phone 01',
               platform: 'ANDROID',
@@ -582,10 +586,14 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      // Slot is wiped -> UI must automatically exit hidden-username Offline mode to Online PIN login!
+      // Slot is wiped -> UI must automatically exit Offline mode to Online PIN login,
+      // displaying the saved @username and allowing Switch user!
       expect(find.text('Offline Reboot Recovery Active'), findsNothing);
-      expect(find.widgetWithText(TextField, 'Staff Username'), findsOneWidget);
+      expect(find.text('@sunita'), findsOneWidget);
       expect(find.text('Verify PIN & Sign In'), findsOneWidget);
+      await tester.tap(find.text('Switch user'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Staff Username'), findsOneWidget);
     });
   });
 }

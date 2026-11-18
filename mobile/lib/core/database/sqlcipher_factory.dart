@@ -35,16 +35,19 @@ class SqlCipherUnavailableException implements Exception {
 class SqlCipherDatabaseFactory {
   SqlCipherDatabaseFactory({
     this.databaseFileName = 'pasalx_vault.db',
+    @visibleForTesting this.databaseFileOverride,
     @visibleForTesting this.hasCipherProbeOverride,
   });
 
   final String databaseFileName;
+  final File? databaseFileOverride;
 
   /// Optional test-only override to simulate missing SQLCipher native library.
   final bool Function(sqlite.Database rawDb)? hasCipherProbeOverride;
 
   /// Resolves the default encrypted vault file path on disk.
   Future<File> resolveDatabaseFile({Directory? baseDir}) async {
+    if (databaseFileOverride != null) return databaseFileOverride!;
     final dir = baseDir ?? await getApplicationSupportDirectory();
     return File(p.join(dir.path, databaseFileName));
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import '../../../core/providers/foundation_providers.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/pasal_widgets.dart';
+import '../../pos/application/pos_beep.dart';
 import '../../pos/application/pos_providers.dart';
 import '../../pos/domain/pos_models.dart';
 import '../../pos/presentation/fefo_and_expired_dialogs.dart';
@@ -43,10 +46,13 @@ class BarcodeScannerScreen extends ConsumerStatefulWidget {
 }
 
 class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
+  static const Duration _sameBarcodeCooldown = Duration(seconds: 2);
+
   final TextEditingController _manualCtrl = TextEditingController();
   MobileScannerController? _scannerController;
   bool _torchOn = false;
   bool _handlingScan = false;
+  final Map<String, DateTime> _lastCameraScanAt = <String, DateTime>{};
   final List<PosScannedBatch> _sessionQueue = <PosScannedBatch>[];
 
   @override
@@ -54,7 +60,7 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
     super.initState();
     try {
       _scannerController = MobileScannerController(
-        detectionSpeed: DetectionSpeed.noDuplicates,
+        detectionSpeed: DetectionSpeed.normal,
       );
     } catch (_) {
       _scannerController = null;
@@ -85,7 +91,35 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
     }
   }
 
-  Future<void> _processBarcode(String rawCode) async {
+  void _handleCameraDetect(BarcodeCapture capture) {
+    if (_handlingScan) return;
+    final now = DateTime.now();
+    for (final barcode in capture.barcodes) {
+      final code = barcode.rawValue?.trim();
+      if (code == null || code.isEmpty) continue;
+      final lastAt = _lastCameraScanAt[code];
+      if (lastAt != null && now.difference(lastAt) < _sameBarcodeCooldown) {
+        continue;
+      }
+      _recordCameraScan(code, now);
+      _processBarcode(code, fromCamera: true);
+      return;
+    }
+  }
+
+  void _recordCameraScan(String code, DateTime now) {
+    if (_lastCameraScanAt.length > 32) {
+      _lastCameraScanAt.removeWhere(
+        (_, ts) => now.difference(ts) >= _sameBarcodeCooldown,
+      );
+    }
+    _lastCameraScanAt[code] = now;
+  }
+
+  Future<void> _processBarcode(
+    String rawCode, {
+    bool fromCamera = false,
+  }) async {
     final code = rawCode.trim();
     if (code.isEmpty || _handlingScan) return;
 
@@ -113,6 +147,7 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
         case PosBatchScanStatus.ok:
           final batch = lookup.scannedBatch!;
           HapticFeedback.lightImpact();
+          unawaited(PosBeep.playSuccess());
           ref.read(posCartProvider.notifier).addBatch(batch);
           setState(() => _sessionQueue.insert(0, batch));
           ref.read(pasalAlertProvider.notifier).showSuccess(
@@ -132,6 +167,8 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
             older: lookup.olderFefoBatch!,
           );
           if (chosen != null && mounted) {
+            HapticFeedback.lightImpact();
+            unawaited(PosBeep.playSuccess());
             ref.read(posCartProvider.notifier).addBatch(chosen);
             setState(() => _sessionQueue.insert(0, chosen));
             ref.read(pasalAlertProvider.notifier).showSuccess(
@@ -149,6 +186,9 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
           break;
       }
     } finally {
+      if (fromCamera) {
+        _recordCameraScan(code, DateTime.now());
+      }
       _handlingScan = false;
     }
   }
@@ -217,16 +257,7 @@ class _BarcodeScannerScreenState extends ConsumerState<BarcodeScannerScreen> {
                                   )
                                 : MobileScanner(
                                     controller: _scannerController,
-                                    onDetect: (capture) {
-                                      for (final barcode in capture.barcodes) {
-                                        final raw = barcode.rawValue;
-                                        if (raw != null &&
-                                            raw.trim().isNotEmpty) {
-                                          _processBarcode(raw);
-                                          return;
-                                        }
-                                      }
-                                    },
+                                    onDetect: _handleCameraDetect,
                                     errorBuilder: (context, error, child) {
                                       return const _CameraFallbackBox(
                                         color: Color(0xFF161D1A),

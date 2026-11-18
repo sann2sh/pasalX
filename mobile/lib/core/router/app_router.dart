@@ -3,7 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/application/auth_session_controller.dart';
+import '../../features/auth/presentation/account_auth_screen.dart';
+import '../../features/auth/presentation/device_approval_pending_screen.dart';
+import '../../features/auth/presentation/password_reset_screens.dart';
 import '../../features/auth/presentation/shift_open_login_screen.dart';
+import '../../features/auth/presentation/store_setup_screen.dart';
+import '../../features/auth/presentation/verify_email_screen.dart';
 import '../../features/history/presentation/history_screen.dart';
 import '../../features/history/presentation/sale_detail_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -16,13 +21,21 @@ import '../../features/pos/presentation/pos_screen.dart';
 import '../../features/pos/presentation/quick_pad_sheet.dart';
 import '../../features/register/presentation/register_screen.dart';
 import '../../features/settings/presentation/backup_settings_screen.dart';
+import '../../features/settings/presentation/delete_account_screen.dart';
 import '../../features/settings/presentation/printer_settings_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/settings/presentation/team_settings_screen.dart';
 import '../../features/suppliers/presentation/purchase_detail_screen.dart';
 import '../../features/suppliers/presentation/suppliers_screen.dart';
 import 'shell_scaffold.dart';
 
 abstract final class AppRoutes {
+  static const String accountAuth = '/auth/account';
+  static const String verifyEmail = '/auth/verify-email';
+  static const String forgotPassword = '/auth/forgot-password';
+  static const String resetPassword = '/auth/reset-password';
+  static const String storeSetup = '/auth/store-setup';
+  static const String devicePending = '/auth/device-pending';
   static const String login = '/login';
   static const String home = '/home';
   static const String history = '/history';
@@ -40,6 +53,8 @@ abstract final class AppRoutes {
   static const String settings = '/settings';
   static const String settingsPrinter = '/settings/printer';
   static const String settingsBackup = '/settings/backup';
+  static const String settingsTeam = '/settings/team';
+  static const String settingsAccount = '/settings/account';
 
   static String saleDetail(String id) => '/history/sale/$id';
   static String purchaseDetail(String id) => '/history/purchase/$id';
@@ -65,17 +80,68 @@ GoRouter createAppRouter({
     redirect: authGate == null
         ? null
         : (context, state) {
-            final ready = authGate.state.isReady;
-            final onLogin = state.matchedLocation == AppRoutes.login;
-            if (!ready && !onLogin) {
-              return AppRoutes.login;
+            final loc = state.matchedLocation;
+            final stage = authGate.state.stage;
+            switch (stage) {
+              case AuthGateStage.accountAuthRequired:
+                if (loc == AppRoutes.accountAuth ||
+                    loc == AppRoutes.forgotPassword ||
+                    loc == AppRoutes.resetPassword) {
+                  return null;
+                }
+                return AppRoutes.accountAuth;
+              case AuthGateStage.emailVerificationRequired:
+                return loc == AppRoutes.verifyEmail ? null : AppRoutes.verifyEmail;
+              case AuthGateStage.storeSetupRequired:
+                return loc == AppRoutes.storeSetup ? null : AppRoutes.storeSetup;
+              case AuthGateStage.deviceApprovalPending:
+              case AuthGateStage.deviceRejected:
+                return loc == AppRoutes.devicePending
+                    ? null
+                    : AppRoutes.devicePending;
+              case AuthGateStage.initializing:
+              case AuthGateStage.locked:
+              case AuthGateStage.shiftOpenRequired:
+              case AuthGateStage.revoked:
+                return loc == AppRoutes.login ? null : AppRoutes.login;
+              case AuthGateStage.ready:
+                if (loc == AppRoutes.login || loc.startsWith('/auth/')) {
+                  return AppRoutes.home;
+                }
+                return null;
             }
-            if (ready && onLogin) {
-              return AppRoutes.home;
-            }
-            return null;
           },
     routes: <RouteBase>[
+      GoRoute(
+        path: AppRoutes.accountAuth,
+        name: 'account-auth',
+        builder: (context, state) => const AccountAuthScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.verifyEmail,
+        name: 'verify-email',
+        builder: (context, state) => const VerifyEmailScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        name: 'forgot-password',
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.resetPassword,
+        name: 'reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.storeSetup,
+        name: 'store-setup',
+        builder: (context, state) => const StoreSetupScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.devicePending,
+        name: 'device-pending',
+        builder: (context, state) => const DeviceApprovalPendingScreen(),
+      ),
       GoRoute(
         path: AppRoutes.login,
         name: 'login',
@@ -220,6 +286,18 @@ GoRouter createAppRouter({
             name: 'settings-backup',
             parentNavigatorKey: navKey,
             builder: (context, state) => const BackupSettingsScreen(),
+          ),
+          GoRoute(
+            path: 'team',
+            name: 'settings-team',
+            parentNavigatorKey: navKey,
+            builder: (context, state) => const TeamSettingsScreen(),
+          ),
+          GoRoute(
+            path: 'account',
+            name: 'settings-account',
+            parentNavigatorKey: navKey,
+            builder: (context, state) => const DeleteAccountScreen(),
           ),
         ],
       ),

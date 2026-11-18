@@ -20,18 +20,48 @@ class PrinterConfigNotifier extends Notifier<PrinterConfig> {
     if (db != null) {
       final epoch = ++_loadEpoch;
       unawaited(_loadFromDb(db, epoch));
+      final sub = db.watchActiveStoreProfile().listen((store) {
+        if (store != null && epoch == _loadEpoch) {
+          state = _mergeStoreProfile(state, store);
+        }
+      });
+      ref.onDispose(sub.cancel);
     }
     return const PrinterConfig();
   }
 
+  PrinterConfig _mergeStoreProfile(PrinterConfig base, StoreRow store) {
+    return base.copyWith(
+      storeName: store.name.trim().isNotEmpty ? store.name.trim() : base.storeName,
+      storePan: (store.panNumber ?? '').trim().isNotEmpty
+          ? store.panNumber!.trim()
+          : base.storePan,
+      storePhone: (store.phone ?? '').trim().isNotEmpty
+          ? store.phone!.trim()
+          : base.storePhone,
+      storeAddress: (store.address ?? '').trim().isNotEmpty
+          ? store.address!.trim()
+          : base.storeAddress,
+    );
+  }
+
   Future<void> _loadFromDb(AppDatabase db, int epoch) async {
     try {
+      var cfg = const PrinterConfig();
       final raw = await db.getMetadata(_metaKey);
-      if (epoch != _loadEpoch || raw == null || raw.trim().isEmpty) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        state = PrinterConfig.fromJson(decoded);
+      if (epoch != _loadEpoch) return;
+      if (raw != null && raw.trim().isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          cfg = PrinterConfig.fromJson(decoded);
+        }
       }
+      final store = await db.fetchActiveStoreProfile();
+      if (epoch != _loadEpoch) return;
+      if (store != null) {
+        cfg = _mergeStoreProfile(cfg, store);
+      }
+      state = cfg;
     } catch (_) {
       // Safe no-op if DB closes during teardown or JSON is corrupt.
     }

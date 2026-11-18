@@ -489,3 +489,39 @@ class SyncMetadata extends Table {
   @override
   Set<Column<Object>> get primaryKey => {key};
 }
+
+/// 8. SYNCED STORE PROFILE (`stores`, server-authoritative via `GET /api/sync/pull`).
+@DataClassName('StoreRow')
+class Stores extends Table {
+  @override
+  String get tableName => 'stores';
+
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get panNumber => text().nullable()();
+  TextColumn get phone => text().nullable()();
+  TextColumn get address => text().nullable()();
+  TextColumn get status => text().withDefault(const Constant('ACTIVE'))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// 9. SYNCED STORE MEMBERS (`store_members`, server-authoritative via `GET /api/sync/pull`).
+@DataClassName('StoreMemberRow')
+class StoreMembers extends Table {
+  @override
+  String get tableName => 'store_members';
+
+  TextColumn get id => text()();
+  TextColumn get userId => text().unique()();
+  TextColumn get name => text()();
+  TextColumn get username => text()();
+  TextColumn get role => text()(); // 'OWNER', 'MANAGER', 'STAFF'
+  TextColumn get status => text().withDefault(const Constant('ACTIVE'))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}

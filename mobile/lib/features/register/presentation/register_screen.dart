@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/database/app_database.dart';
@@ -8,7 +7,6 @@ import '../../../core/database/money.dart';
 import '../../../core/printer/esc_pos_receipt_builder.dart';
 import '../../../core/printer/printer_providers.dart';
 import '../../../core/providers/foundation_providers.dart';
-import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/pasal_widgets.dart';
@@ -159,14 +157,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ],
               ),
             ),
-            if (isManagerOrOwner) ...[
-              const SizedBox(width: AppSpacing.sm),
-              OutlinedButton.icon(
-                onPressed: () => context.push(AppRoutes.suppliers),
-                icon: const Icon(Icons.local_shipping_outlined, size: 18),
-                label: const Text('Suppliers'),
-              ),
-            ],
           ],
         ),
         const SizedBox(height: AppSpacing.md),

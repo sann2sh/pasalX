@@ -22,7 +22,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PasalX'), findsOneWidget);
-    expect(find.text('Terminal Enrollment'), findsOneWidget);
+    expect(find.text('Sign in to your PasalX account'), findsOneWidget);
 
     final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(materialApp.theme?.colorScheme.primary, const Color(0xFF215542));

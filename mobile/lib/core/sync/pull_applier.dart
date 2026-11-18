@@ -24,6 +24,44 @@ abstract final class PullApplier {
       await db.customStatement('PRAGMA defer_foreign_keys = ON;');
 
       if (c.totalRecordCount > 0) {
+        for (final st in c.stores) {
+          await db.into(db.stores).insertOnConflictUpdate(
+                StoresCompanion.insert(
+                  id: st.id,
+                  name: st.name,
+                  panNumber: Value(st.panNumber),
+                  phone: Value(st.phone),
+                  address: Value(st.address),
+                  status: Value(st.status),
+                  updatedAt: _dtVal(st.updatedAt),
+                ),
+              );
+        }
+
+        for (final m in c.storeMembers) {
+          await db.into(db.storeMembers).insertOnConflictUpdate(
+                StoreMembersCompanion.insert(
+                  id: m.id,
+                  userId: m.userId,
+                  name: m.name,
+                  username: m.username,
+                  role: m.role,
+                  status: Value(m.status),
+                  updatedAt: _dtVal(m.updatedAt),
+                ),
+              );
+          await db.into(db.users).insertOnConflictUpdate(
+                UsersCompanion.insert(
+                  id: m.userId,
+                  name: m.name,
+                  username: m.username,
+                  role: m.role,
+                  isActive: Value(m.status == 'ACTIVE'),
+                  updatedAt: _dtVal(m.updatedAt),
+                ),
+              );
+        }
+
         await _ensureReferencedUsers(db, c);
 
         for (final s in c.suppliers) {

@@ -189,12 +189,420 @@ class PasalApiClient {
     return SyncPullResult.fromJson(json);
   }
 
+  // ------------------------------------------------------------------ Phase 2: Account Onboarding
+
+  Future<SignupResult> signup({
+    required String name,
+    required String email,
+    required String password,
+    required String username,
+    required String pin,
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/auth/signup',
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'name': name.trim(),
+        'email': email.trim(),
+        'password': password,
+        'username': username.trim(),
+        'pin': pin.trim(),
+      },
+    );
+    return SignupResult.fromJson(json);
+  }
+
+  Future<void> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/auth/verify-email',
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'email': email.trim(),
+        'code': code.trim(),
+      },
+    );
+  }
+
+  Future<void> resendVerification({required String email}) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/auth/resend-verification',
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{'email': email.trim()},
+    );
+  }
+
+  Future<AccountLoginResult> accountLogin({
+    required String email,
+    required String password,
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/auth/account-login',
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'email': email.trim(),
+        'password': password,
+      },
+    );
+    return AccountLoginResult.fromJson(json);
+  }
+
+  Future<void> forgotPassword({required String email}) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/auth/forgot-password',
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{'email': email.trim()},
+    );
+  }
+
+  Future<void> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/auth/reset-password',
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'email': email.trim(),
+        'code': code.trim(),
+        'new_password': newPassword,
+      },
+    );
+  }
+
+  Future<void> deleteAccount({
+    required String accountToken,
+    required String password,
+  }) async {
+    await _sendJson(
+      method: 'DELETE',
+      path: '/api/account',
+      accessToken: accountToken,
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{'password': password},
+    );
+  }
+
+  // ------------------------------------------------------------------ Phase 2: Store & Enrollment
+
+  Future<CreateStoreResult> createStore({
+    required String accountToken,
+    required String storeName,
+    String? panNumber,
+    String? phone,
+    String? address,
+    required String deviceName,
+    String platform = 'ANDROID',
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/stores',
+      accessToken: accountToken,
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'store_name': storeName.trim(),
+        if (panNumber != null && panNumber.trim().isNotEmpty)
+          'pan_number': panNumber.trim(),
+        if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        if (address != null && address.trim().isNotEmpty)
+          'address': address.trim(),
+        'device_name': deviceName.trim(),
+        'platform': platform.toUpperCase().trim(),
+      },
+    );
+    return CreateStoreResult.fromJson(json);
+  }
+
+  Future<StoreInfo> getCurrentStore({required String accessToken}) async {
+    final json = await _sendJson(
+      method: 'GET',
+      path: '/api/stores/current',
+      accessToken: accessToken,
+    );
+    return StoreInfo.fromJson(json['store'] as Map<String, dynamic>);
+  }
+
+  Future<StoreInfo> updateCurrentStore({
+    required String accessToken,
+    String? name,
+    String? panNumber,
+    String? phone,
+    String? address,
+  }) async {
+    final json = await _sendJson(
+      method: 'PATCH',
+      path: '/api/stores/current',
+      accessToken: accessToken,
+      body: <String, dynamic>{
+        if (name != null) 'name': name.trim(),
+        if (panNumber != null) 'pan_number': panNumber.trim(),
+        if (phone != null) 'phone': phone.trim(),
+        if (address != null) 'address': address.trim(),
+      },
+    );
+    return StoreInfo.fromJson(json['store'] as Map<String, dynamic>);
+  }
+
+  Future<Map<String, dynamic>> exportStore({required String accessToken}) async {
+    return _sendJson(
+      method: 'GET',
+      path: '/api/stores/current/export',
+      accessToken: accessToken,
+    );
+  }
+
+  Future<void> closeStore({
+    required String accessToken,
+    required String password,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/close',
+      accessToken: accessToken,
+      body: <String, dynamic>{'password': password},
+    );
+  }
+
+  Future<void> leaveStore({
+    required String accessToken,
+    required bool outboxEmpty,
+    required bool discardUnsynced,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/leave',
+      accessToken: accessToken,
+      body: <String, dynamic>{
+        'outbox_empty': outboxEmpty,
+        'discard_unsynced': discardUnsynced,
+      },
+    );
+  }
+
+  Future<void> transferOwnership({
+    required String accessToken,
+    required String targetUserId,
+    required String password,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/transfer-ownership',
+      accessToken: accessToken,
+      body: <String, dynamic>{
+        'target_user_id': targetUserId.trim(),
+        'password': password,
+      },
+    );
+  }
+
+  // ------------------------------------------------------------------ Phase 2: Invitations & Approvals
+
+  Future<InvitationInfo> createInvitation({
+    required String accessToken,
+    required String role,
+    String? invitedEmail,
+    bool sendEmail = false,
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/invitations',
+      accessToken: accessToken,
+      body: <String, dynamic>{
+        'role': role.toUpperCase().trim(),
+        if (invitedEmail != null && invitedEmail.trim().isNotEmpty)
+          'invited_email': invitedEmail.trim(),
+        'send_email': sendEmail,
+      },
+    );
+    return InvitationInfo.fromJson(json['invitation'] as Map<String, dynamic>);
+  }
+
+  Future<List<InvitationInfo>> listInvitations({
+    required String accessToken,
+  }) async {
+    final json = await _sendJson(
+      method: 'GET',
+      path: '/api/stores/current/invitations',
+      accessToken: accessToken,
+    );
+    final raw = json['invitations'] as List<dynamic>? ?? const [];
+    return raw
+        .map((e) => InvitationInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> revokeInvitation({
+    required String accessToken,
+    required String invitationId,
+  }) async {
+    await _sendJson(
+      method: 'DELETE',
+      path: '/api/stores/current/invitations/${Uri.encodeComponent(invitationId)}',
+      accessToken: accessToken,
+    );
+  }
+
+  Future<DeviceStatusResult> acceptInvitation({
+    required String accountToken,
+    required String code,
+    required String deviceName,
+    String platform = 'ANDROID',
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/invitations/accept',
+      accessToken: accountToken,
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'code': code.trim().toUpperCase(),
+        'device_name': deviceName.trim(),
+        'platform': platform.toUpperCase().trim(),
+      },
+    );
+    return DeviceStatusResult.fromJson(json);
+  }
+
+  Future<DeviceStatusResult> enrollDevice({
+    required String accountToken,
+    required String deviceName,
+    String platform = 'ANDROID',
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/devices/enroll',
+      accessToken: accountToken,
+      triggerDeviceRevoked: false,
+      body: <String, dynamic>{
+        'device_name': deviceName.trim(),
+        'platform': platform.toUpperCase().trim(),
+      },
+    );
+    return DeviceStatusResult.fromJson(json);
+  }
+
+  Future<DeviceStatusResult> getMyDeviceStatus({
+    required String accountToken,
+    required String deviceId,
+  }) async {
+    final json = await _sendJson(
+      method: 'GET',
+      path: '/api/devices/me/status',
+      queryParameters: <String, String>{'device_id': deviceId},
+      accessToken: accountToken,
+      triggerDeviceRevoked: false,
+    );
+    return DeviceStatusResult.fromJson(json);
+  }
+
+  Future<List<RegisteredDevice>> listStoreDevices({
+    required String accessToken,
+    String? status,
+  }) async {
+    final json = await _sendJson(
+      method: 'GET',
+      path: '/api/stores/current/devices',
+      queryParameters:
+          (status != null && status.trim().isNotEmpty) ? {'status': status.trim()} : null,
+      accessToken: accessToken,
+    );
+    final raw = json['devices'] as List<dynamic>? ?? const [];
+    return raw
+        .map((e) => RegisteredDevice.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<RegisteredDevice> approveDevice({
+    required String accessToken,
+    required String deviceId,
+  }) async {
+    final json = await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/devices/${Uri.encodeComponent(deviceId)}/approve',
+      accessToken: accessToken,
+    );
+    return RegisteredDevice.fromJson(json['device'] as Map<String, dynamic>);
+  }
+
+  Future<void> rejectDevice({
+    required String accessToken,
+    required String deviceId,
+    String reason = '',
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/devices/${Uri.encodeComponent(deviceId)}/reject',
+      accessToken: accessToken,
+      body: reason.trim().isEmpty ? null : <String, dynamic>{'reason': reason.trim()},
+    );
+  }
+
+  // ------------------------------------------------------------------ Phase 2: Team Members
+
+  Future<List<MemberInfo>> listMembers({required String accessToken}) async {
+    final json = await _sendJson(
+      method: 'GET',
+      path: '/api/stores/current/members',
+      accessToken: accessToken,
+    );
+    final raw = json['members'] as List<dynamic>? ?? const [];
+    return raw
+        .map((e) => MemberInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> updateMemberRole({
+    required String accessToken,
+    required String userId,
+    required String role,
+  }) async {
+    await _sendJson(
+      method: 'PATCH',
+      path: '/api/stores/current/members/${Uri.encodeComponent(userId)}',
+      accessToken: accessToken,
+      body: <String, dynamic>{'role': role.toUpperCase().trim()},
+    );
+  }
+
+  Future<void> removeMember({
+    required String accessToken,
+    required String userId,
+  }) async {
+    await _sendJson(
+      method: 'DELETE',
+      path: '/api/stores/current/members/${Uri.encodeComponent(userId)}',
+      accessToken: accessToken,
+    );
+  }
+
+  Future<void> resetMemberPin({
+    required String accessToken,
+    required String userId,
+    required String newPin,
+  }) async {
+    await _sendJson(
+      method: 'POST',
+      path: '/api/stores/current/members/${Uri.encodeComponent(userId)}/reset-pin',
+      accessToken: accessToken,
+      body: <String, dynamic>{'new_pin': newPin.trim()},
+    );
+  }
+
   Future<Map<String, dynamic>> _sendJson({
     required String method,
     required String path,
     Map<String, String>? queryParameters,
     String? accessToken,
     Map<String, dynamic>? body,
+    bool triggerDeviceRevoked = true,
   }) async {
     final uri = config.resolve(path, queryParameters);
     final headers = <String, String>{
@@ -213,6 +621,20 @@ class PasalApiClient {
           break;
         case 'POST':
           requestFuture = _client.post(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          );
+          break;
+        case 'PATCH':
+          requestFuture = _client.patch(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          );
+          break;
+        case 'DELETE':
+          requestFuture = _client.delete(
             uri,
             headers: headers,
             body: body == null ? null : jsonEncode(body),
@@ -253,7 +675,9 @@ class PasalApiClient {
       decodedBody: decoded,
       rawBody: response.body,
     );
-    if (apiErr.isDeviceRevoked && onDeviceRevoked != null) {
+    if (triggerDeviceRevoked &&
+        apiErr.isDeviceRevoked &&
+        onDeviceRevoked != null) {
       await onDeviceRevoked!(apiErr.message);
     }
     throw apiErr;

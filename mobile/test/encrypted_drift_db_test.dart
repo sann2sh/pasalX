@@ -167,6 +167,8 @@ void main() {
         'sale_payments',
         'staff_shift_sessions',
         'stock_movements',
+        'store_members',
+        'stores',
         'supplier_payments',
         'suppliers',
         'sync_metadata',
