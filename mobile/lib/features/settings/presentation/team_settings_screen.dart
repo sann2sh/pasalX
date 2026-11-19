@@ -189,7 +189,7 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
 
   Future<void> _promptResetPin(MemberInfo member) async {
     final pinCtrl = TextEditingController();
-    final newPin = await showDialog<String>(
+    final newPin = await showPasalDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Reset PIN for ${member.name}'),
@@ -238,7 +238,7 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
   }
 
   Future<void> _confirmRemoveMember(MemberInfo member) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showPasalDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Remove ${member.name}?'),
@@ -286,7 +286,7 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
 
     String selectedUserId = candidates.first.userId;
     final passCtrl = TextEditingController();
-    final result = await showDialog<({String userId, String password})>(
+    final result = await showPasalDialog<({String userId, String password})>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlgState) => AlertDialog(
@@ -296,12 +296,17 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
             children: [
               DropdownButtonFormField<String>(
                 initialValue: selectedUserId,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'New Owner'),
                 items: candidates
                     .map(
                       (m) => DropdownMenuItem(
                         value: m.userId,
-                        child: Text('${m.name} (@${m.username})'),
+                        child: Text(
+                          '${m.name} (@${m.username})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),
@@ -375,7 +380,7 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
 
   Future<void> _promptCloseStore() async {
     final passCtrl = TextEditingController();
-    final password = await showDialog<String>(
+    final password = await showPasalDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Close Store Permanently?'),
@@ -502,14 +507,21 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'STAFF', label: Text('Cashier')),
-                        ButtonSegment(value: 'MANAGER', label: Text('Manager')),
+                    PasalClipSegmentedTabs<String>(
+                      selectedValue: _inviteRole,
+                      activePillColor: c.primary,
+                      activeForegroundColor: c.onPrimary,
+                      onChanged: (role) => setState(() => _inviteRole = role),
+                      options: const [
+                        PasalSegmentOption<String>(
+                          value: 'STAFF',
+                          label: 'Cashier',
+                        ),
+                        PasalSegmentOption<String>(
+                          value: 'MANAGER',
+                          label: 'Manager',
+                        ),
                       ],
-                      selected: <String>{_inviteRole},
-                      onSelectionChanged: (sel) =>
-                          setState(() => _inviteRole = sel.first),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextField(
@@ -697,14 +709,11 @@ class _TeamSettingsScreenState extends ConsumerState<TeamSettingsScreen> {
                       label: const Text('Transfer Store Ownership'),
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: c.error,
-                        foregroundColor: c.onError,
-                      ),
-                      onPressed: _promptCloseStore,
-                      icon: const Icon(Icons.delete_forever_outlined, size: 18),
-                      label: const Text('Close Store'),
+                    PasalHoldToConfirmButton(
+                      label: 'Hold to Close Store',
+                      holdingLabel: 'Keep holding to confirm...',
+                      icon: Icons.delete_forever_outlined,
+                      onConfirmed: _promptCloseStore,
                     ),
                   ],
                 ),

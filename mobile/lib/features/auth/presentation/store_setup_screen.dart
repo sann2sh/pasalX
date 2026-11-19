@@ -133,29 +133,36 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
                       ),
                     ),
                   ] else ...[
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment<bool>(
+                    PasalClipSegmentedTabs<bool>(
+                      selectedValue: _joinMode,
+                      activePillColor: c.primary,
+                      activeForegroundColor: c.onPrimary,
+                      onChanged: (v) {
+                        if (!s.busy) setState(() => _joinMode = v);
+                      },
+                      options: const [
+                        PasalSegmentOption<bool>(
                           value: false,
-                          label: Text('Create Store'),
-                          icon: Icon(Icons.storefront_outlined, size: 18),
+                          label: 'Create Store',
+                          icon: Icons.storefront_outlined,
                         ),
-                        ButtonSegment<bool>(
+                        PasalSegmentOption<bool>(
                           value: true,
-                          label: Text('Join with Code'),
-                          icon: Icon(Icons.vpn_key_outlined, size: 18),
+                          label: 'Join with Code',
+                          icon: Icons.vpn_key_outlined,
                         ),
                       ],
-                      selected: <bool>{_joinMode},
-                      onSelectionChanged: s.busy
-                          ? null
-                          : (sel) => setState(() => _joinMode = sel.first),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     PasalCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
+                      child: AnimatedSize(
+                        duration: AppMotion.resolveDuration(
+                            context, AppMotion.popover),
+                        curve: AppMotion.easeOut,
+                        alignment: Alignment.topCenter,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
                           if (!_joinMode) ...[
                             TextField(
                               controller: _storeNameCtrl,
@@ -252,6 +259,7 @@ class _StoreSetupScreenState extends ConsumerState<StoreSetupScreen> {
                             ),
                           ],
                         ],
+                      ),
                       ),
                     ),
                   ],

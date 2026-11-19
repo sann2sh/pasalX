@@ -330,13 +330,9 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
       _savedResult = result;
 
       if (!printAfterSave) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
+        ref.read(pasalAlertProvider.notifier).showSuccess(
               'Saved ${result.product.name} (${result.batch.stockQuantity} units) to encrypted vault.',
-            ),
-          ),
-        );
+            );
         if (context.canPop()) {
           context.pop(true);
         } else {
@@ -391,11 +387,6 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
       ref.read(pasalAlertProvider.notifier).showSuccess(
             'Stock saved & $qty labels sent to printer',
           );
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Stock saved & $qty labels sent to printer'),
-        ),
-      );
       if (context.canPop()) {
         context.pop(true);
       } else {
@@ -743,224 +734,246 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                 ),
                 const SizedBox(height: AppSpacing.md),
 
-                // Dynamic Section 1: Cosmetics Shades + Color Picker
-                if (_category.asksShadeColor) ...[
-                  Text('SHADE & VISUAL COLOR DOT', style: t.labelMedium),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: InventoryDateUtils.parseHexColor(
-                                _selectedShadeHex,
-                              ) ??
-                              c.secondaryContainer,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: c.hairline, width: 1.5),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: TextField(
-                          key: const ValueKey('intake-shade-name'),
-                          controller: _shadeNameCtrl,
-                          enabled: !formLockedAfterSave &&
-                              _selectedExistingVariantId == null,
-                          onChanged: (_) => setState(() {}),
-                          decoration: const InputDecoration(
-                            labelText: 'Shade Name / Code',
-                            hintText: 'e.g. #128 Warm Nude or Velvet Teddy',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: kCosmeticShadeSwatches.map((swatch) {
-                      final isSelected = swatch.hex.toUpperCase() ==
-                          _selectedShadeHex.toUpperCase();
-                      final dotColor =
-                          InventoryDateUtils.parseHexColor(swatch.hex)!;
-                      return Tooltip(
-                        message: swatch.name,
-                        child: InkWell(
-                          key: ValueKey('swatch-${swatch.hex}'),
-                          borderRadius: BorderRadius.circular(AppRadii.pill),
-                          onTap: formLockedAfterSave ||
-                                  _selectedExistingVariantId != null
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _selectedShadeHex = swatch.hex;
-                                    if (_shadeNameCtrl.text.trim().isEmpty) {
-                                      _shadeNameCtrl.text = swatch.name;
-                                    }
-                                  });
-                                },
-                          child: Container(
-                            width: 34,
-                            height: 34,
-                            decoration: BoxDecoration(
-                              color: dotColor,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isSelected ? c.primary : c.hairline,
-                                width: isSelected ? 3 : 1,
-                              ),
-                            ),
-                            child: isSelected
-                                ? const Icon(
-                                    Icons.check_rounded,
-                                    size: 16,
-                                    color: Colors.white,
-                                  )
-                                : null,
-                          ),
-                        ),
-                      );
-                    }).toList(growable: false),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  TextField(
-                    key: const ValueKey('intake-size-optional'),
-                    controller: _sizeVolumeCtrl,
-                    enabled: !formLockedAfterSave &&
-                        _selectedExistingVariantId == null,
-                    decoration: const InputDecoration(
-                      labelText: 'Pack Weight / Volume (Optional)',
-                      hintText: 'e.g. 30ml or 3.0g',
-                    ),
-                  ),
-                ],
-
-                // Dynamic Section 2: Haircare / Skincare Volume + SPF/Skin Type
-                if (_category.asksSizeVolume) ...[
-                  Text('BOTTLE SIZE / VOLUME', style: t.labelMedium),
-                  const SizedBox(height: 6),
-                  TextField(
-                    key: const ValueKey('intake-size-volume'),
-                    controller: _sizeVolumeCtrl,
-                    enabled: !formLockedAfterSave &&
-                        _selectedExistingVariantId == null,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: _category == SmartIntakeCategory.haircare
-                          ? 'Bottle Size / Volume (ml / L)'
-                          : 'Tube / Bottle Size (ml / g)',
-                      hintText: _category == SmartIntakeCategory.haircare
-                          ? 'e.g. 400ml'
-                          : 'e.g. 50ml',
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: (_category == SmartIntakeCategory.haircare
-                            ? kHaircareSizePresets
-                            : kSkincareSizePresets)
-                        .map(
-                          (preset) => ActionChip(
-                            label: Text(preset),
-                            onPressed: formLockedAfterSave ||
-                                    _selectedExistingVariantId != null
-                                ? null
-                                : () => setState(
-                                      () => _sizeVolumeCtrl.text = preset,
-                                    ),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                ],
-
-                if (_category.asksSpfAndSkin) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Text('SPF PROTECTION', style: t.labelMedium),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: kSpfPresets
-                        .map(
-                          (spf) => ChoiceChip(
-                            key: ValueKey('intake-spf-$spf'),
-                            selected: _selectedSpf == spf,
-                            label: Text(spf),
-                            onSelected: formLockedAfterSave ||
-                                    _selectedExistingVariantId != null
-                                ? null
-                                : (_) => setState(() => _selectedSpf = spf),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text('SKIN TYPE TARGET', style: t.labelMedium),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: kSkinTypePresets
-                        .map(
-                          (skin) => ChoiceChip(
-                            key: ValueKey('intake-skin-$skin'),
-                            selected: _selectedSkinType == skin,
-                            label: Text(skin),
-                            onSelected: formLockedAfterSave ||
-                                    _selectedExistingVariantId != null
-                                ? null
-                                : (_) =>
-                                    setState(() => _selectedSkinType = skin),
-                          ),
-                        )
-                        .toList(growable: false),
-                  ),
-                ],
-
-                if (_category.isGeneric) ...[
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: c.secondaryContainer.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(AppRadii.md),
-                    ),
-                    child: Row(
+                // Category-driven dynamic fields with synchronized AnimatedSize + crossfade
+                AnimatedSize(
+                  duration: AppMotion.resolveDuration(context, AppMotion.popover),
+                  curve: AppMotion.easeOut,
+                  alignment: Alignment.topCenter,
+                  child: PasalBlurStateSwitcher(
+                    duration: const Duration(milliseconds: 150),
+                    child: Column(
+                      key: ValueKey<SmartIntakeCategory>(_category),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Icon(
-                          Icons.all_inclusive_rounded,
-                          size: 18,
-                          color: c.onSecondaryContainer,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Generic unpacked accessories omit shade pickers & expiry dates.',
-                            style: t.bodySmall
-                                ?.copyWith(color: c.onSecondaryContainer),
+                        // Dynamic Section 1: Cosmetics Shades + Color Picker
+                        if (_category.asksShadeColor) ...[
+                          Text('SHADE & VISUAL COLOR DOT', style: t.labelMedium),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: InventoryDateUtils.parseHexColor(
+                                        _selectedShadeHex,
+                                      ) ??
+                                      c.secondaryContainer,
+                                  shape: BoxShape.circle,
+                                  border:
+                                      Border.all(color: c.hairline, width: 1.5),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: TextField(
+                                  key: const ValueKey('intake-shade-name'),
+                                  controller: _shadeNameCtrl,
+                                  enabled: !formLockedAfterSave &&
+                                      _selectedExistingVariantId == null,
+                                  onChanged: (_) => setState(() {}),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Shade Name / Code',
+                                    hintText:
+                                        'e.g. #128 Warm Nude or Velvet Teddy',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: kCosmeticShadeSwatches.map((swatch) {
+                              final isSelected = swatch.hex.toUpperCase() ==
+                                  _selectedShadeHex.toUpperCase();
+                              final dotColor = InventoryDateUtils.parseHexColor(
+                                  swatch.hex)!;
+                              return Tooltip(
+                                message: swatch.name,
+                                child: InkWell(
+                                  key: ValueKey('swatch-${swatch.hex}'),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadii.pill),
+                                  onTap: formLockedAfterSave ||
+                                          _selectedExistingVariantId != null
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _selectedShadeHex = swatch.hex;
+                                            if (_shadeNameCtrl.text
+                                                .trim()
+                                                .isEmpty) {
+                                              _shadeNameCtrl.text = swatch.name;
+                                            }
+                                          });
+                                        },
+                                  child: Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      color: dotColor,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color:
+                                            isSelected ? c.primary : c.hairline,
+                                        width: isSelected ? 3 : 1,
+                                      ),
+                                    ),
+                                    child: isSelected
+                                        ? const Icon(
+                                            Icons.check_rounded,
+                                            size: 16,
+                                            color: Colors.white,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            }).toList(growable: false),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          TextField(
+                            key: const ValueKey('intake-size-optional'),
+                            controller: _sizeVolumeCtrl,
+                            enabled: !formLockedAfterSave &&
+                                _selectedExistingVariantId == null,
+                            decoration: const InputDecoration(
+                              labelText: 'Pack Weight / Volume (Optional)',
+                              hintText: 'e.g. 30ml or 3.0g',
+                            ),
+                          ),
+                        ],
+
+                        // Dynamic Section 2: Haircare / Skincare Volume + SPF/Skin Type
+                        if (_category.asksSizeVolume) ...[
+                          Text('BOTTLE SIZE / VOLUME', style: t.labelMedium),
+                          const SizedBox(height: 6),
+                          TextField(
+                            key: const ValueKey('intake-size-volume'),
+                            controller: _sizeVolumeCtrl,
+                            enabled: !formLockedAfterSave &&
+                                _selectedExistingVariantId == null,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                              labelText: _category == SmartIntakeCategory.haircare
+                                  ? 'Bottle Size / Volume (ml / L)'
+                                  : 'Tube / Bottle Size (ml / g)',
+                              hintText: _category == SmartIntakeCategory.haircare
+                                  ? 'e.g. 400ml'
+                                  : 'e.g. 50ml',
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: (_category == SmartIntakeCategory.haircare
+                                    ? kHaircareSizePresets
+                                    : kSkincareSizePresets)
+                                .map(
+                                  (preset) => ActionChip(
+                                    label: Text(preset),
+                                    onPressed: formLockedAfterSave ||
+                                            _selectedExistingVariantId != null
+                                        ? null
+                                        : () => setState(
+                                              () => _sizeVolumeCtrl.text = preset,
+                                            ),
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                        ],
+
+                        if (_category.asksSpfAndSkin) ...[
+                          const SizedBox(height: AppSpacing.md),
+                          Text('SPF PROTECTION', style: t.labelMedium),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: kSpfPresets
+                                .map(
+                                  (spf) => ChoiceChip(
+                                    key: ValueKey('intake-spf-$spf'),
+                                    selected: _selectedSpf == spf,
+                                    label: Text(spf),
+                                    onSelected: formLockedAfterSave ||
+                                            _selectedExistingVariantId != null
+                                        ? null
+                                        : (_) =>
+                                            setState(() => _selectedSpf = spf),
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text('SKIN TYPE TARGET', style: t.labelMedium),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: kSkinTypePresets
+                                .map(
+                                  (skin) => ChoiceChip(
+                                    key: ValueKey('intake-skin-$skin'),
+                                    selected: _selectedSkinType == skin,
+                                    label: Text(skin),
+                                    onSelected: formLockedAfterSave ||
+                                            _selectedExistingVariantId != null
+                                        ? null
+                                        : (_) => setState(
+                                            () => _selectedSkinType = skin),
+                                  ),
+                                )
+                                .toList(growable: false),
+                          ),
+                        ],
+
+                        if (_category.isGeneric) ...[
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: c.secondaryContainer.withValues(alpha: 0.6),
+                              borderRadius: BorderRadius.circular(AppRadii.md),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.all_inclusive_rounded,
+                                  size: 18,
+                                  color: c.onSecondaryContainer,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Generic unpacked accessories omit shade pickers & expiry dates.',
+                                    style: t.bodySmall
+                                        ?.copyWith(color: c.onSecondaryContainer),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          TextField(
+                            key: const ValueKey('intake-generic-label'),
+                            controller: _genericLabelCtrl,
+                            enabled: !formLockedAfterSave &&
+                                _selectedExistingVariantId == null,
+                            onChanged: (_) => setState(() {}),
+                            decoration: const InputDecoration(
+                              labelText: 'Pack / Assortment Label',
+                              hintText: 'Standard',
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                  TextField(
-                    key: const ValueKey('intake-generic-label'),
-                    controller: _genericLabelCtrl,
-                    enabled: !formLockedAfterSave &&
-                        _selectedExistingVariantId == null,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Pack / Assortment Label',
-                      hintText: 'Standard',
-                    ),
-                  ),
-                ],
+                ),
 
                 if (suppliers.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.md),
@@ -1056,6 +1069,7 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                         key: const ValueKey('intake-selling-price'),
                         controller: _mrpCtrl,
                         enabled: !formLockedAfterSave,
+                        textInputAction: TextInputAction.next,
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
@@ -1089,6 +1103,9 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                         key: const ValueKey('intake-lot-code'),
                         controller: _lotCtrl,
                         enabled: !formLockedAfterSave,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
                           labelText: 'Lot / Batch Code',
                         ),
@@ -1101,6 +1118,10 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                           key: const ValueKey('intake-expiry-date'),
                           controller: _expiryCtrl,
                           enabled: !formLockedAfterSave,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          textInputAction: TextInputAction.next,
+                          keyboardType: TextInputType.datetime,
                           onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
                             labelText: 'Exp (MM/YYYY)',
@@ -1114,6 +1135,7 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                           key: const ValueKey('intake-qty-generic'),
                           controller: _qtyCtrl,
                           enabled: !formLockedAfterSave,
+                          textInputAction: TextInputAction.next,
                           keyboardType: TextInputType.number,
                           onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
@@ -1129,6 +1151,7 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                     key: const ValueKey('intake-qty'),
                     controller: _qtyCtrl,
                     enabled: !formLockedAfterSave,
+                    textInputAction: TextInputAction.next,
                     keyboardType: TextInputType.number,
                     onChanged: (_) => setState(() {}),
                     decoration: const InputDecoration(
@@ -1144,6 +1167,9 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                         key: const ValueKey('intake-sticker-barcode'),
                         controller: _barcodeCtrl,
                         enabled: !formLockedAfterSave,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textInputAction: TextInputAction.done,
                         onChanged: (_) => setState(() {}),
                         decoration: const InputDecoration(
                           labelText: 'Sticker Barcode (TSPL Code 128)',
@@ -1200,15 +1226,19 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
             onSelectionChanged: (s) => setState(() => _labelStyle = s.first),
           ),
           const SizedBox(height: AppSpacing.sm),
-          DualThermalLabelPreview(
-            productName: _productNameCtrl.text,
-            variantName: _resolvedVariantName(),
-            stickerBarcode: _barcodeCtrl.text,
-            sellingPricePaisa: mrpPaisa,
-            expiryLabel:
-                _category.asksExpiry ? _expiryCtrl.text.trim() : 'Non-Exp',
-            deviceCode: deviceCode,
-            style: _labelStyle,
+          PasalBlurStateSwitcher(
+            duration: const Duration(milliseconds: 160),
+            child: DualThermalLabelPreview(
+              key: ValueKey<TsplLabelStyle>(_labelStyle),
+              productName: _productNameCtrl.text,
+              variantName: _resolvedVariantName(),
+              stickerBarcode: _barcodeCtrl.text,
+              sellingPricePaisa: mrpPaisa,
+              expiryLabel:
+                  _category.asksExpiry ? _expiryCtrl.text.trim() : 'Non-Exp',
+              deviceCode: deviceCode,
+              style: _labelStyle,
+            ),
           ),
 
           if (_error != null) ...[
@@ -1261,10 +1291,15 @@ class _SmartIntakeScreenState extends ConsumerState<SmartIntakeScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.print_rounded),
-              label: Text(
-                qty > 200
-                    ? 'Save Batch & Print 200 Labels (max/job)'
-                    : 'Save Batch & Print ${qty > 0 ? qty : 1} Labels',
+              label: PasalBlurStateSwitcher(
+                child: Text(
+                  _submitting
+                      ? 'Saving & Printing...'
+                      : (qty > 200
+                          ? 'Save Batch & Print 200 Labels (max/job)'
+                          : 'Save Batch & Print ${qty > 0 ? qty : 1} Labels'),
+                  key: ValueKey<bool>(_submitting),
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.sm),

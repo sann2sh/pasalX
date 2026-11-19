@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,11 +42,13 @@ class _PosScreenState extends ConsumerState<PosScreen> {
   bool _searching = false;
   bool _handlingScan = false;
   int _searchEpoch = 0;
+  Timer? _searchSpinnerTimer;
   ReceiptPrintData? _pendingReprint;
   String? _lastPrintError;
 
   @override
   void dispose() {
+    _searchSpinnerTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -140,6 +143,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
 
   Future<void> _onSearchChanged(String query) async {
     final epoch = ++_searchEpoch;
+    _searchSpinnerTimer?.cancel();
     final trimmed = query.trim();
     if (trimmed.isEmpty) {
       setState(() {
@@ -152,9 +156,15 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     final role = ref.read(ramKeyHolderProvider).session?.role;
     if (repo == null) return;
 
-    setState(() => _searching = true);
+    // Suppress spinner flash for <180ms local SQLite queries (remove-animations).
+    _searchSpinnerTimer = Timer(const Duration(milliseconds: 180), () {
+      if (mounted && epoch == _searchEpoch && !_searching) {
+        setState(() => _searching = true);
+      }
+    });
     final results = await repo.searchSellableBatches(trimmed, role: role);
     if (!mounted || epoch != _searchEpoch) return;
+    _searchSpinnerTimer?.cancel();
     setState(() {
       _searchResults = results;
       _searching = false;
@@ -258,14 +268,8 @@ class _PosScreenState extends ConsumerState<PosScreen> {
     }
   }
 
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return 'WI';
-    return parts
-        .take(2)
-        .map((w) => w.isEmpty ? '' : w[0].toUpperCase())
-        .join();
-  }
+  String _initials(String name) =>
+      PasalTextUtils.initials(name, fallback: 'WI');
 
   @override
   Widget build(BuildContext context) {
@@ -313,6 +317,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                           ),
                           const SizedBox(width: 10),
                           Expanded(
+                            flex: 2,
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
@@ -338,17 +343,27 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                               ],
                             ),
                           ),
-                          Text(
-                            customer != null ? 'Change' : 'Khata / Shades',
-                            style: t.labelMedium?.copyWith(
-                              color: c.primary,
-                              fontWeight: FontWeight.w700,
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              customer != null ? 'Change' : 'Khata / Shades',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: t.labelMedium?.copyWith(
+                                color: c.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                           if (customer != null)
                             IconButton(
                               tooltip: 'Detach customer',
-                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints(
+                                minWidth: AppSpacing.minTouchTarget,
+                                minHeight: AppSpacing.minTouchTarget,
+                              ),
+                              padding: EdgeInsets.zero,
                               onPressed: () => ref
                                   .read(posCartProvider.notifier)
                                   .selectCustomer(null),
@@ -407,6 +422,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 // Full-width Search Bar
                 TextField(
                   controller: _searchCtrl,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textInputAction: TextInputAction.search,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search_rounded),
                     hintText: 'Search product, shade or barcode...',
@@ -431,7 +449,7 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   },
                 ),
 
-                // Inline Search Results Dropdown
+                // Inline Search Results Dropdown (origin-aware top-center scale+fade)
                 if (_searching)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
@@ -439,32 +457,54 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                   )
                 else if (_searchResults.isNotEmpty) ...[
                   const SizedBox(height: AppSpacing.xs),
-                  PasalCard(
-                    color: c.surfaceContainerLowest,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: Column(
-                        children: [
-                          for (final item in _searchResults.take(6))
-                            ListTile(
-                              dense: true,
-                              title: Text(
-                                '${item.productName} • ${item.variantName}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                  TweenAnimationBuilder<double>(
+                    key: ValueKey<int>(_searchEpoch),
+                    tween: Tween<double>(begin: 0.0, end: 1.0),
+                    duration: AppMotion.resolveDuration(
+                      context,
+                      const Duration(milliseconds: 150),
+                    ),
+                    curve: AppMotion.easeOut,
+                    builder: (context, tVal, child) {
+                      final reduce = AppMotion.shouldReduceMotion(context);
+                      return Opacity(
+                        opacity: tVal,
+                        child: reduce
+                            ? child
+                            : Transform.scale(
+                                scale: 0.97 + 0.03 * tVal,
+                                alignment: Alignment.topCenter,
+                                child: child,
                               ),
-                              subtitle: Text(
-                                '${item.stickerBarcode} • ${item.stockQuantity} left'
-                                '${item.isNonPerishable ? '' : ' • Exp ${_expFmt.format(item.expiryDate)}'}',
+                      );
+                    },
+                    child: PasalCard(
+                      color: c.surfaceContainerLowest,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Column(
+                          children: [
+                            for (final item in _searchResults.take(6))
+                              ListTile(
+                                dense: true,
+                                title: Text(
+                                  '${item.productName} • ${item.variantName}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  '${item.stickerBarcode} • ${item.stockQuantity} left'
+                                  '${item.isNonPerishable ? '' : ' • Exp ${_expFmt.format(item.expiryDate)}'}',
+                                ),
+                                trailing: PasalTabularText(
+                                  '+ ${MoneyUtils.formatRs(item.sellingPricePaisa)}',
+                                  style: t.titleSmall?.copyWith(color: c.primary),
+                                ),
+                                onTap: () => _onSearchItemTapped(item),
                               ),
-                              trailing: PasalTabularText(
-                                '+ ${MoneyUtils.formatRs(item.sellingPricePaisa)}',
-                                style: t.titleSmall?.copyWith(color: c.primary),
-                              ),
-                              onTap: () => _onSearchItemTapped(item),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -472,15 +512,17 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 const SizedBox(height: AppSpacing.md),
 
                 // Active Cart Header
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
                             'ACTIVE CART',
                             style: t.labelLarge?.copyWith(
                               color: c.onSurfaceVariant,
@@ -489,60 +531,66 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.secondaryContainer,
+                            borderRadius:
+                                BorderRadius.circular(AppRadii.pill),
+                          ),
+                          child: Text(
+                            '${cart.itemCount} '
+                            '${cart.itemCount == 1 ? 'Item' : 'Items'}',
+                            style: t.labelSmall?.copyWith(
+                              color: c.onSecondaryContainer,
+                              fontWeight: FontWeight.w700,
                             ),
-                            decoration: BoxDecoration(
-                              color: c.secondaryContainer,
-                              borderRadius:
-                                  BorderRadius.circular(AppRadii.pill),
-                            ),
-                            child: Text(
-                              '${cart.itemCount} '
-                              '${cart.itemCount == 1 ? 'Item' : 'Items'}',
-                              style: t.labelSmall?.copyWith(
-                                color: c.onSecondaryContainer,
-                                fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (cart.items.isNotEmpty)
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 2,
+                        children: [
+                          TextButton(
+                            onPressed: _openCartDiscount,
+                            style: TextButton.styleFrom(
+                              minimumSize:
+                                  const Size(0, AppSpacing.minTouchTarget),
+                              tapTargetSize: MaterialTapTargetSize.padded,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
                               ),
                             ),
+                            child: Text(
+                              cart.discountPaisa > 0 ? 'Edit Disc.' : 'Discount',
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () =>
+                                ref.read(posCartProvider.notifier).clearCart(),
+                            style: TextButton.styleFrom(
+                              foregroundColor: c.error,
+                              minimumSize:
+                                  const Size(0, AppSpacing.minTouchTarget),
+                              tapTargetSize: MaterialTapTargetSize.padded,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 8,
+                              ),
+                            ),
+                            child: const Text('Clear All'),
                           ),
                         ],
                       ),
-                    ),
-                    if (cart.items.isNotEmpty) ...[
-                      TextButton(
-                        onPressed: _openCartDiscount,
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
-                          ),
-                        ),
-                        child: Text(
-                          cart.discountPaisa > 0 ? 'Edit Disc.' : 'Discount',
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: () =>
-                            ref.read(posCartProvider.notifier).clearCart(),
-                        style: TextButton.styleFrom(
-                          foregroundColor: c.error,
-                          visualDensity: VisualDensity.compact,
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
-                          ),
-                        ),
-                        child: const Text('Clear All'),
-                      ),
-                    ],
                   ],
                 ),
                 const SizedBox(height: AppSpacing.xs),
@@ -577,19 +625,21 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                     ),
                   )
                 else ...[
-                  for (final item in cart.items) ...[
-                    _CartLineTile(
-                      item: item,
-                      onTap: () => _openItemNegotiation(item),
-                      onIncrement: () => ref
+                  RepaintBoundary(
+                    child: _AnimatedCartList(
+                      items: cart.items,
+                      onTapItem: _openItemNegotiation,
+                      onIncrement: (lineKey) => ref
                           .read(posCartProvider.notifier)
-                          .incrementQty(item.lineKey),
-                      onDecrement: () => ref
+                          .incrementQty(lineKey),
+                      onDecrement: (lineKey) => ref
                           .read(posCartProvider.notifier)
-                          .decrementQty(item.lineKey),
+                          .decrementQty(lineKey),
+                      onRemove: (lineKey) => ref
+                          .read(posCartProvider.notifier)
+                          .removeItem(lineKey),
                     ),
-                    const SizedBox(height: AppSpacing.xs),
-                  ],
+                  ),
                   const SizedBox(height: AppSpacing.xs),
                   // Cart Breakdown Card
                   PasalCard(
@@ -600,11 +650,25 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Subtotal', style: t.bodySmall),
-                            PasalTabularText(
-                              MoneyUtils.formatRs(cart.subtotalPaisa),
-                              style: t.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
+                            Flexible(
+                              child: Text(
+                                'Subtotal',
+                                style: t.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: PasalTabularText(
+                                  MoneyUtils.formatRs(cart.subtotalPaisa),
+                                  style: t.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -624,11 +688,18 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              PasalTabularText(
-                                '- ${MoneyUtils.formatRs(cart.discountPaisa)}',
-                                style: t.bodyMedium?.copyWith(
-                                  color: c.primary,
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: PasalTabularText(
+                                    '- ${MoneyUtils.formatRs(cart.discountPaisa)}',
+                                    style: t.bodyMedium?.copyWith(
+                                      color: c.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -643,8 +714,9 @@ class _PosScreenState extends ConsumerState<PosScreen> {
           ),
 
           // BOTTOM-RIGHT THUMB STACK (Quick-Pad stacked on top of Scan) + CHECKOUT DOCK
-          Container(
-            decoration: BoxDecoration(
+          RepaintBoundary(
+            child: Container(
+              decoration: BoxDecoration(
               color: c.surfaceContainerLowest,
               border: Border(top: BorderSide(color: c.hairline)),
               boxShadow: [
@@ -706,42 +778,52 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(
-                            height: 38,
-                            child: FilledButton.tonalIcon(
-                              onPressed: _openQuickPad,
-                              style: FilledButton.styleFrom(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 10),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadii.md),
+                          PasalPressable(
+                            haptic: PasalHaptic.selection,
+                            borderRadius: BorderRadius.circular(AppRadii.md),
+                            onTap: _openQuickPad,
+                            child: SizedBox(
+                              height: 38,
+                              child: FilledButton.tonalIcon(
+                                onPressed: _openQuickPad,
+                                style: FilledButton.styleFrom(
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadii.md),
+                                  ),
                                 ),
+                                icon: const Icon(Icons.grid_view_rounded, size: 17),
+                                label: const Text('Quick-Pad'),
                               ),
-                              icon: const Icon(Icons.grid_view_rounded, size: 17),
-                              label: const Text('Quick-Pad'),
                             ),
                           ),
                           const SizedBox(height: 6),
-                          SizedBox(
-                            height: 44,
-                            child: FilledButton.icon(
-                              onPressed: _openScanner,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: c.onSurface,
-                                foregroundColor: c.surface,
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadii.md),
+                          PasalPressable(
+                            haptic: PasalHaptic.light,
+                            borderRadius: BorderRadius.circular(AppRadii.md),
+                            onTap: _openScanner,
+                            child: SizedBox(
+                              height: 44,
+                              child: FilledButton.icon(
+                                onPressed: _openScanner,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: c.onSurface,
+                                  foregroundColor: c.surface,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadii.md),
+                                  ),
                                 ),
+                                icon: const Icon(
+                                  Icons.qr_code_scanner_rounded,
+                                  size: 19,
+                                ),
+                                label: const Text('Scan'),
                               ),
-                              icon: const Icon(
-                                Icons.qr_code_scanner_rounded,
-                                size: 19,
-                              ),
-                              label: const Text('Scan'),
                             ),
                           ),
                         ],
@@ -755,53 +837,77 @@ class _PosScreenState extends ConsumerState<PosScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: FilledButton.icon(
-                        onPressed: cart.items.isEmpty
+                      child: PasalPressable(
+                        haptic: PasalHaptic.light,
+                        enabled: cart.items.isNotEmpty,
+                        borderRadius: BorderRadius.circular(AppRadii.lg),
+                        onTap: cart.items.isEmpty
                             ? null
                             : () => _openCheckout(CheckoutTab.cash),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 11,
+                        child: FilledButton.icon(
+                          onPressed: cart.items.isEmpty
+                              ? null
+                              : () => _openCheckout(CheckoutTab.cash),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 11,
+                            ),
+                            minimumSize: const Size(0, 42),
                           ),
-                          minimumSize: const Size(0, 42),
+                          icon: const Icon(Icons.payments_rounded, size: 17),
+                          label: const Text('Cash'),
                         ),
-                        icon: const Icon(Icons.payments_rounded, size: 17),
-                        label: const Text('Cash'),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: cart.items.isEmpty
+                      child: PasalPressable(
+                        haptic: PasalHaptic.light,
+                        enabled: cart.items.isNotEmpty,
+                        borderRadius: BorderRadius.circular(AppRadii.lg),
+                        onTap: cart.items.isEmpty
                             ? null
                             : () => _openCheckout(CheckoutTab.fonepay),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 11,
+                        child: OutlinedButton.icon(
+                          onPressed: cart.items.isEmpty
+                              ? null
+                              : () => _openCheckout(CheckoutTab.fonepay),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 11,
+                            ),
+                            minimumSize: const Size(0, 42),
                           ),
-                          minimumSize: const Size(0, 42),
+                          icon: const Icon(Icons.qr_code_2_rounded, size: 17),
+                          label: const Text('QR Pay'),
                         ),
-                        icon: const Icon(Icons.qr_code_2_rounded, size: 17),
-                        label: const Text('QR Pay'),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: cart.items.isEmpty
+                      child: PasalPressable(
+                        haptic: PasalHaptic.light,
+                        enabled: cart.items.isNotEmpty,
+                        borderRadius: BorderRadius.circular(AppRadii.lg),
+                        onTap: cart.items.isEmpty
                             ? null
                             : () => _openCheckout(CheckoutTab.khata),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 11,
+                        child: OutlinedButton.icon(
+                          onPressed: cart.items.isEmpty
+                              ? null
+                              : () => _openCheckout(CheckoutTab.khata),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 11,
+                            ),
+                            minimumSize: const Size(0, 42),
                           ),
-                          minimumSize: const Size(0, 42),
+                          icon: const Icon(Icons.menu_book_rounded, size: 17),
+                          label: const Text('Khata'),
                         ),
-                        icon: const Icon(Icons.menu_book_rounded, size: 17),
-                        label: const Text('Khata'),
                       ),
                     ),
                   ],
@@ -809,13 +915,337 @@ class _PosScreenState extends ConsumerState<PosScreen> {
               ],
             ),
           ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _CartLineTile extends StatelessWidget {
+/// Coordinates cart item enter/exit so removed rows release vertical space
+/// simultaneously while fading out (`popLayout` gap-close) and new scans enter
+/// from `scale(0.96) + opacity(0)`.
+class _AnimatedCartList extends StatefulWidget {
+  const _AnimatedCartList({
+    required this.items,
+    required this.onTapItem,
+    required this.onIncrement,
+    required this.onDecrement,
+    required this.onRemove,
+  });
+
+  final List<PosCartItem> items;
+  final ValueChanged<PosCartItem> onTapItem;
+  final ValueChanged<String> onIncrement;
+  final ValueChanged<String> onDecrement;
+  final ValueChanged<String> onRemove;
+
+  @override
+  State<_AnimatedCartList> createState() => _AnimatedCartListState();
+}
+
+class _CartEntry {
+  _CartEntry({required this.item, this.exiting = false});
+  PosCartItem item;
+  bool exiting;
+}
+
+class _AnimatedCartListState extends State<_AnimatedCartList> {
+  late List<_CartEntry> _entries;
+
+  @override
+  void initState() {
+    super.initState();
+    _entries = widget.items
+        .map((e) => _CartEntry(item: e))
+        .toList(growable: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedCartList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextByKey = {for (final i in widget.items) i.lineKey: i};
+    final updated = <_CartEntry>[];
+
+    // Keep existing order; mark missing items as exiting so they collapse simultaneously.
+    for (final entry in _entries) {
+      final match = nextByKey[entry.item.lineKey];
+      if (match != null) {
+        updated.add(_CartEntry(item: match, exiting: false));
+      } else if (!entry.exiting) {
+        updated.add(_CartEntry(item: entry.item, exiting: true));
+      }
+    }
+
+    // Append newly added items.
+    final seen = {for (final e in updated) e.item.lineKey};
+    for (final item in widget.items) {
+      if (!seen.contains(item.lineKey)) {
+        updated.add(_CartEntry(item: item, exiting: false));
+      }
+    }
+
+    _entries = updated;
+  }
+
+  void _removeExited(String lineKey) {
+    if (!mounted) return;
+    setState(() {
+      _entries.removeWhere((e) => e.item.lineKey == lineKey && e.exiting);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final entry in _entries)
+          _CartItemChoreoRow(
+            key: ValueKey<String>('cart-choreo-${entry.item.lineKey}'),
+            exiting: entry.exiting,
+            onExitFinished: () => _removeExited(entry.item.lineKey),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: _SwipeToRemoveCartTile(
+                onDismissed: () => widget.onRemove(entry.item.lineKey),
+                child: _CartLineTile(
+                  item: entry.item,
+                  onTap: () => widget.onTapItem(entry.item),
+                  onIncrement: () => widget.onIncrement(entry.item.lineKey),
+                  onDecrement: () => widget.onDecrement(entry.item.lineKey),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CartItemChoreoRow extends StatefulWidget {
+  const _CartItemChoreoRow({
+    super.key,
+    required this.exiting,
+    required this.onExitFinished,
+    required this.child,
+  });
+
+  final bool exiting;
+  final VoidCallback onExitFinished;
+  final Widget child;
+
+  @override
+  State<_CartItemChoreoRow> createState() => _CartItemChoreoRowState();
+}
+
+class _CartItemChoreoRowState extends State<_CartItemChoreoRow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _curved;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 160),
+      reverseDuration: const Duration(milliseconds: 140),
+      value: widget.exiting ? 1.0 : 0.0,
+    );
+    _curved = CurvedAnimation(
+      parent: _ctrl,
+      curve: AppMotion.easeOut,
+      reverseCurve: AppMotion.easeOut,
+    );
+    _ctrl.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed && widget.exiting) {
+        widget.onExitFinished();
+      }
+    });
+    if (!widget.exiting) {
+      _ctrl.forward();
+    } else {
+      _ctrl.reverse();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _CartItemChoreoRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.exiting && !oldWidget.exiting) {
+      _ctrl.reverse();
+    } else if (!widget.exiting && oldWidget.exiting) {
+      _ctrl.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (AppMotion.shouldReduceMotion(context)) {
+      return widget.exiting ? const SizedBox.shrink() : widget.child;
+    }
+    return SizeTransition(
+      sizeFactor: _curved,
+      axisAlignment: -1.0,
+      child: FadeTransition(
+        opacity: _curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1.0).animate(_curved),
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
+
+/// 1:1 horizontal swipe-left-to-delete wrapper with rubber-band right resistance,
+/// linked trash icon reveal, and velocity-seeded spring snap-back (`gestures`).
+class _SwipeToRemoveCartTile extends StatefulWidget {
+  const _SwipeToRemoveCartTile({
+    required this.onDismissed,
+    required this.child,
+  });
+
+  final VoidCallback onDismissed;
+  final Widget child;
+
+  @override
+  State<_SwipeToRemoveCartTile> createState() => _SwipeToRemoveCartTileState();
+}
+
+class _SwipeToRemoveCartTileState extends State<_SwipeToRemoveCartTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _dxCtrl;
+  double _width = 320.0;
+
+  static const SpringDescription _snapSpring = SpringDescription(
+    mass: 1.0,
+    stiffness: 400.0,
+    damping: 40.0, // critically damped
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _dxCtrl = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _dxCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _dxCtrl.stop();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    final delta = details.primaryDelta ?? 0.0;
+    final next = _dxCtrl.value + delta;
+    if (next <= 0.0) {
+      _dxCtrl.value = next;
+    } else {
+      // Rubber-band resistance when swiping right (non-destructive direction).
+      _dxCtrl.value = _dxCtrl.value + delta * 0.18;
+    }
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    final threshold = _width * 0.40;
+    if (_dxCtrl.value <= -threshold || velocity < -500.0) {
+      HapticFeedback.mediumImpact();
+      widget.onDismissed();
+      return;
+    }
+    _dxCtrl.animateWith(
+      SpringSimulation(_snapSpring, _dxCtrl.value, 0.0, velocity),
+    );
+  }
+
+  void _onDragCancel() {
+    _dxCtrl.animateWith(
+      SpringSimulation(_snapSpring, _dxCtrl.value, 0.0, 0.0),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.pasalColors;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 0) {
+          _width = constraints.maxWidth;
+        }
+        final threshold = _width * 0.40;
+
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragStart: _onDragStart,
+          onHorizontalDragUpdate: _onDragUpdate,
+          onHorizontalDragEnd: _onDragEnd,
+          onHorizontalDragCancel: _onDragCancel,
+          child: AnimatedBuilder(
+            animation: _dxCtrl,
+            builder: (context, child) {
+              final dx = _dxCtrl.value;
+              final progress =
+                  dx < 0 ? (-dx / threshold).clamp(0.0, 1.0) : 0.0;
+              return Stack(
+                alignment: Alignment.centerRight,
+                children: [
+                  if (dx < -1.0)
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: c.errorContainer.withValues(
+                            alpha: (0.35 + 0.65 * progress).clamp(0.0, 1.0),
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadii.lg),
+                        ),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: Opacity(
+                              opacity: progress,
+                              child: Transform.scale(
+                                scale: 0.85 + 0.15 * progress,
+                                child: Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: c.error,
+                                  size: 22,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Transform.translate(
+                    offset: Offset(dx, 0),
+                    child: child,
+                  ),
+                ],
+              );
+            },
+            child: widget.child,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CartLineTile extends StatefulWidget {
   const _CartLineTile({
     required this.item,
     required this.onTap,
@@ -827,6 +1257,32 @@ class _CartLineTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
+
+  @override
+  State<_CartLineTile> createState() => _CartLineTileState();
+}
+
+class _CartLineTileState extends State<_CartLineTile> {
+  bool _qtyPulsing = false;
+  Timer? _pulseTimer;
+
+  @override
+  void didUpdateWidget(covariant _CartLineTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.item.quantity > oldWidget.item.quantity) {
+      _pulseTimer?.cancel();
+      setState(() => _qtyPulsing = true);
+      _pulseTimer = Timer(const Duration(milliseconds: 160), () {
+        if (mounted) setState(() => _qtyPulsing = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseTimer?.cancel();
+    super.dispose();
+  }
 
   Color? _parseHex(String? hex) {
     if (hex == null || hex.trim().isEmpty) return null;
@@ -841,19 +1297,26 @@ class _CartLineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.pasalColors;
     final t = context.textTheme;
+    final item = widget.item;
     final swatch = _parseHex(item.colorHex);
+    final reduceMotion = AppMotion.shouldReduceMotion(context);
 
     return Material(
       color: c.surfaceContainerLowest,
       borderRadius: BorderRadius.circular(AppRadii.lg),
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(AppRadii.lg),
-        child: Container(
+        child: AnimatedContainer(
+          duration: reduceMotion ? Duration.zero : const Duration(milliseconds: 180),
+          curve: AppMotion.easeOut,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadii.lg),
-            border: Border.all(color: c.hairline),
+            border: Border.all(
+              color: _qtyPulsing ? c.primary : c.hairline,
+              width: _qtyPulsing ? 1.5 : 1.0,
+            ),
           ),
           child: Row(
             children: [
@@ -894,7 +1357,7 @@ class _CartLineTile extends StatelessWidget {
                 children: [
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    onPressed: onDecrement,
+                    onPressed: widget.onDecrement,
                     icon: Icon(
                       item.quantity > 1
                           ? Icons.remove_circle_outline_rounded
@@ -902,13 +1365,20 @@ class _CartLineTile extends StatelessWidget {
                       size: 20,
                     ),
                   ),
-                  PasalTabularText(
-                    '${item.quantity}',
-                    style: t.titleMedium,
+                  AnimatedScale(
+                    scale: (_qtyPulsing && !reduceMotion) ? 1.16 : 1.0,
+                    duration: const Duration(milliseconds: 140),
+                    curve: AppMotion.easeOut,
+                    child: PasalTabularText(
+                      '${item.quantity}',
+                      style: t.titleMedium?.copyWith(
+                        color: _qtyPulsing ? c.primary : null,
+                      ),
+                    ),
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    onPressed: onIncrement,
+                    onPressed: widget.onIncrement,
                     icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
                   ),
                 ],

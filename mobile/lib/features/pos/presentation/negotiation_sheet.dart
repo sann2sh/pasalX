@@ -14,10 +14,8 @@ Future<PosDiscount?> showNegotiationSheet(
   required int subtotalPaisa,
   required PosDiscount initialDiscount,
 }) {
-  return showModalBottomSheet<PosDiscount>(
+  return showPasalBottomSheet<PosDiscount>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _NegotiationSheet(
       subtotalPaisa: subtotalPaisa,
       initialDiscount: initialDiscount,
@@ -274,7 +272,8 @@ class _TierButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.pasalColors;
     final t = context.textTheme;
-    return InkWell(
+    return PasalPressable(
+      haptic: PasalHaptic.selection,
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadii.lg),
       child: Container(
@@ -396,10 +395,8 @@ Future<ItemNegotiationResult?> showItemNegotiationSheet(
   BuildContext context, {
   required PosCartItem item,
 }) {
-  return showModalBottomSheet<ItemNegotiationResult>(
+  return showPasalBottomSheet<ItemNegotiationResult>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _ItemNegotiationSheet(item: item),
   );
 }

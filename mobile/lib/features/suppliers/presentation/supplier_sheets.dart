@@ -18,10 +18,10 @@ Future<SupplierRow?> showSupplierFormSheet(
   WidgetRef ref, {
   SupplierRow? existing,
 }) {
-  return showModalBottomSheet<SupplierRow>(
+  return showPasalBottomSheet<SupplierRow>(
     context: context,
-    isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: context.pasalColors.surfaceContainerLowest,
     builder: (_) => _SupplierFormSheet(existing: existing, ref: ref),
   );
 }
@@ -191,10 +191,10 @@ Future<bool?> showPaySupplierSheet(
   List<PurchaseInvoiceRow> openInvoices = const <PurchaseInvoiceRow>[],
   PurchaseInvoiceRow? preselectedInvoice,
 }) {
-  return showModalBottomSheet<bool>(
+  return showPasalBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: context.pasalColors.surfaceContainerLowest,
     builder: (_) => _PaySupplierSheet(
       ref: ref,
       supplier: supplier,
@@ -411,10 +411,10 @@ Future<void> showSupplierDetailSheet(
   WidgetRef ref, {
   required String supplierId,
 }) {
-  return showModalBottomSheet<void>(
+  return showPasalBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: context.pasalColors.surfaceContainerLowest,
     builder: (_) => _SupplierDetailSheet(ref: ref, supplierId: supplierId),
   );
 }

@@ -26,7 +26,7 @@ Future<bool> showForceCloseSessionDialog(
   final t = context.textTheme;
   final fmt = DateFormat('yyyy-MM-dd HH:mm');
 
-  final confirmed = await showDialog<bool>(
+  final confirmed = await showPasalDialog<bool>(
     context: context,
     builder: (ctx) {
       return AlertDialog(
@@ -97,10 +97,10 @@ Future<ZReportSettlementResult?> showZReportModal(
   WidgetRef ref, {
   required RegisterShiftRow shift,
 }) {
-  return showModalBottomSheet<ZReportSettlementResult>(
+  return showPasalBottomSheet<ZReportSettlementResult>(
     context: context,
-    isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: context.pasalColors.surfaceContainerLowest,
     builder: (_) => _ZReportModal(shift: shift),
   );
 }

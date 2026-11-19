@@ -36,10 +36,8 @@ Future<CheckoutSheetResult?> showCheckoutSheet(
   BuildContext context, {
   CheckoutTab initialTab = CheckoutTab.cash,
 }) {
-  return showModalBottomSheet<CheckoutSheetResult>(
+  return showPasalBottomSheet<CheckoutSheetResult>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _CheckoutSheet(initialTab: initialTab),
   );
 }
@@ -387,12 +385,10 @@ class _CheckoutSheetState extends ConsumerState<_CheckoutSheet> {
                       backgroundColor: c.secondaryContainer,
                       child: Text(
                         cart.selectedCustomer != null
-                            ? cart.selectedCustomer!.name
-                                .trim()
-                                .split(RegExp(r'\s+'))
-                                .take(2)
-                                .map((w) => w.isEmpty ? '' : w[0].toUpperCase())
-                                .join()
+                            ? PasalTextUtils.initials(
+                                cart.selectedCustomer!.name,
+                                fallback: 'WI',
+                              )
                             : 'WI',
                         style: t.labelSmall?.copyWith(
                           color: c.onSecondaryContainer,
@@ -431,74 +427,42 @@ class _CheckoutSheetState extends ConsumerState<_CheckoutSheet> {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            // 3-Tab Payment Selector (Cash | Fonepay QR | Khata)
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: c.surfaceContainer,
-                borderRadius: BorderRadius.circular(AppRadii.md),
-              ),
-              child: Row(
-                children: [
-                  for (final entry in const <(CheckoutTab, String)>[
-                    (CheckoutTab.cash, 'Cash'),
-                    (CheckoutTab.fonepay, 'Fonepay QR'),
-                    (CheckoutTab.khata, 'Khata'),
-                  ])
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => setState(() {
-                          _tab = entry.$1;
-                          _error = null;
-                        }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: _tab == entry.$1
-                                ? c.surfaceContainerLowest
-                                : Colors.transparent,
-                            borderRadius: BorderRadius.circular(AppRadii.sm),
-                            boxShadow: _tab == entry.$1
-                                ? [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            entry.$2,
-                            style: t.labelLarge?.copyWith(
-                              color: _tab == entry.$1
-                                  ? c.primary
-                                  : c.onSurfaceVariant,
-                              fontWeight: _tab == entry.$1
-                                  ? FontWeight.w700
-                                  : FontWeight.w600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+            // 3-Tab Payment Selector (Cash | Fonepay QR | Khata) with clip-path pill glide
+            PasalClipSegmentedTabs<CheckoutTab>(
+              selectedValue: _tab,
+              onChanged: (tab) => setState(() {
+                _tab = tab;
+                _error = null;
+              }),
+              options: const [
+                PasalSegmentOption(value: CheckoutTab.cash, label: 'Cash'),
+                PasalSegmentOption(
+                  value: CheckoutTab.fonepay,
+                  label: 'Fonepay QR',
+                ),
+                PasalSegmentOption(value: CheckoutTab.khata, label: 'Khata'),
+              ],
             ),
             const SizedBox(height: AppSpacing.md),
-            if (_tab == CheckoutTab.cash)
-              _buildCashPanel(context, net)
-            else if (_tab == CheckoutTab.fonepay)
-              _buildFonepayPanel(context, net)
-            else if (_tab == CheckoutTab.khata)
-              _buildKhataPanel(context, net, cart.selectedCustomer)
-            else if (_tab == CheckoutTab.card)
-              _buildCardPanel(context, net)
-            else
-              _buildSplitPanel(context, net),
+            AnimatedSize(
+              duration: AppMotion.resolveDuration(context, AppMotion.popover),
+              curve: AppMotion.easeOut,
+              alignment: Alignment.topCenter,
+              child: PasalBlurStateSwitcher(
+                duration: const Duration(milliseconds: 150),
+                child: KeyedSubtree(
+                  key: ValueKey<CheckoutTab>(_tab),
+                  child: switch (_tab) {
+                    CheckoutTab.cash => _buildCashPanel(context, net),
+                    CheckoutTab.fonepay => _buildFonepayPanel(context, net),
+                    CheckoutTab.khata =>
+                      _buildKhataPanel(context, net, cart.selectedCustomer),
+                    CheckoutTab.card => _buildCardPanel(context, net),
+                    CheckoutTab.split => _buildSplitPanel(context, net),
+                  },
+                ),
+              ),
+            ),
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Container(
@@ -517,24 +481,43 @@ class _CheckoutSheetState extends ConsumerState<_CheckoutSheet> {
               ),
             ],
             const SizedBox(height: AppSpacing.md),
-            FilledButton.icon(
-              onPressed:
-                  _submitting ? null : () => _complete(printReceipt: true),
-              icon: _submitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.print_rounded),
-              label: const Text('Complete Sale & Print Receipt'),
+            PasalPressable(
+              haptic: PasalHaptic.light,
+              enabled: !_submitting,
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+              onTap: _submitting ? null : () => _complete(printReceipt: true),
+              child: FilledButton.icon(
+                onPressed:
+                    _submitting ? null : () => _complete(printReceipt: true),
+                icon: _submitting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.print_rounded),
+                label: PasalBlurStateSwitcher(
+                  child: Text(
+                    _submitting
+                        ? 'Completing & Printing...'
+                        : 'Complete Sale & Print Receipt',
+                    key: ValueKey<bool>(_submitting),
+                  ),
+                ),
+              ),
             ),
             const SizedBox(height: AppSpacing.xs),
-            OutlinedButton.icon(
-              onPressed:
-                  _submitting ? null : () => _complete(printReceipt: false),
-              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-              label: const Text('Complete Without Printing'),
+            PasalPressable(
+              haptic: PasalHaptic.light,
+              enabled: !_submitting,
+              borderRadius: BorderRadius.circular(AppRadii.lg),
+              onTap: _submitting ? null : () => _complete(printReceipt: false),
+              child: OutlinedButton.icon(
+                onPressed:
+                    _submitting ? null : () => _complete(printReceipt: false),
+                icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                label: const Text('Complete Without Printing'),
+              ),
             ),
           ],
         ),

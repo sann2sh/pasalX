@@ -6,6 +6,7 @@ import '../../../core/database/money.dart';
 import '../../../core/providers/foundation_providers.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/pasal_widgets.dart';
 import '../../suppliers/application/supplier_providers.dart';
 import '../../suppliers/domain/supplier_models.dart';
 
@@ -15,10 +16,10 @@ Future<bool?> showPettyExpenseSheet(
   WidgetRef ref, {
   String? shiftId,
 }) {
-  return showModalBottomSheet<bool>(
+  return showPasalBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
     useSafeArea: true,
+    backgroundColor: context.pasalColors.surfaceContainerLowest,
     builder: (_) => _PettyExpenseSheet(ref: ref, shiftId: shiftId),
   );
 }

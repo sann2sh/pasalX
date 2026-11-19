@@ -121,23 +121,25 @@ class _AccountAuthScreenState extends ConsumerState<AccountAuthScreen> {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment<bool>(
+                  PasalClipSegmentedTabs<bool>(
+                    selectedValue: _isSignUp,
+                    activePillColor: c.primary,
+                    activeForegroundColor: c.onPrimary,
+                    onChanged: (v) {
+                      if (!s.busy) setState(() => _isSignUp = v);
+                    },
+                    options: const [
+                      PasalSegmentOption<bool>(
                         value: false,
-                        label: Text('Log In'),
-                        icon: Icon(Icons.login_rounded, size: 18),
+                        label: 'Log In',
+                        icon: Icons.login_rounded,
                       ),
-                      ButtonSegment<bool>(
+                      PasalSegmentOption<bool>(
                         value: true,
-                        label: Text('Sign Up'),
-                        icon: Icon(Icons.person_add_alt_1_rounded, size: 18),
+                        label: 'Sign Up',
+                        icon: Icons.person_add_alt_1_rounded,
                       ),
                     ],
-                    selected: <bool>{_isSignUp},
-                    onSelectionChanged: s.busy
-                        ? null
-                        : (sel) => setState(() => _isSignUp = sel.first),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   if (s.infoMessage != null) ...[
@@ -159,9 +161,14 @@ class _AccountAuthScreenState extends ConsumerState<AccountAuthScreen> {
                     const SizedBox(height: AppSpacing.sm),
                   ],
                   PasalCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
+                    child: AnimatedSize(
+                      duration:
+                          AppMotion.resolveDuration(context, AppMotion.popover),
+                      curve: AppMotion.easeOut,
+                      alignment: Alignment.topCenter,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
                         if (_isSignUp) ...[
                           TextField(
                             controller: _nameCtrl,
@@ -174,6 +181,8 @@ class _AccountAuthScreenState extends ConsumerState<AccountAuthScreen> {
                           const SizedBox(height: AppSpacing.sm),
                           TextField(
                             controller: _usernameCtrl,
+                            autocorrect: false,
+                            enableSuggestions: false,
                             textInputAction: TextInputAction.next,
                             decoration: const InputDecoration(
                               labelText: 'Username (for daily POS login)',
@@ -185,6 +194,8 @@ class _AccountAuthScreenState extends ConsumerState<AccountAuthScreen> {
                         TextField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          enableSuggestions: false,
                           textInputAction: TextInputAction.next,
                           decoration: const InputDecoration(
                             labelText: 'Email Address',
@@ -261,6 +272,7 @@ class _AccountAuthScreenState extends ConsumerState<AccountAuthScreen> {
                           ),
                         ],
                       ],
+                    ),
                     ),
                   ),
                   if (!kReleaseMode) ...[

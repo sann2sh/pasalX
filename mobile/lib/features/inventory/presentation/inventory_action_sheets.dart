@@ -18,10 +18,8 @@ Future<bool?> showStockAdjustmentSheet(
   required ProductVariantRow variant,
   required BatchRow batch,
 }) {
-  return showModalBottomSheet<bool>(
+  return showPasalBottomSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _StockAdjustmentSheet(
       product: product,
       variant: variant,
@@ -334,10 +332,8 @@ Future<void> showPrintLabelsSheet(
   required ProductVariantRow variant,
   required BatchRow batch,
 }) {
-  return showModalBottomSheet<void>(
+  return showPasalBottomSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _PrintLabelsSheet(
       product: product,
       variant: variant,

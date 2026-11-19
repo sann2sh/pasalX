@@ -69,7 +69,7 @@ class _KhataLedgerScreenState extends ConsumerState<KhataLedgerScreen> {
     if (repo == null) return;
     final role = ref.read(ramKeyHolderProvider).session?.role;
 
-    final created = await showDialog<CustomerRow>(
+    final created = await showPasalDialog<CustomerRow>(
       context: context,
       builder: (ctx) => _NewCustomerDialog(
         onSave: ({
@@ -100,7 +100,7 @@ class _KhataLedgerScreenState extends ConsumerState<KhataLedgerScreen> {
     final session = ref.read(ramKeyHolderProvider).session;
     if (repo == null || session == null) return;
 
-    final paid = await showDialog<bool>(
+    final paid = await showPasalDialog<bool>(
       context: context,
       builder: (ctx) => _ReceivePaymentDialog(
         customer: customer,
@@ -121,12 +121,8 @@ class _KhataLedgerScreenState extends ConsumerState<KhataLedgerScreen> {
     }
   }
 
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return 'KH';
-    if (parts.length == 1) return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
+  String _initials(String name) =>
+      PasalTextUtils.initials(name, fallback: 'KH');
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +183,7 @@ class _KhataLedgerScreenState extends ConsumerState<KhataLedgerScreen> {
           // Customer Switcher Pills
           if (customers.isNotEmpty)
             SizedBox(
-              height: 40,
+              height: MediaQuery.textScalerOf(context).scale(16) + 26,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: customers.length,
@@ -232,6 +228,7 @@ class _KhataLedgerScreenState extends ConsumerState<KhataLedgerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
                         width: 44,
@@ -251,14 +248,22 @@ class _KhataLedgerScreenState extends ConsumerState<KhataLedgerScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(customer.name, style: t.titleMedium),
+                            Text(
+                              customer.name,
+                              style: t.titleMedium,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             PasalTabularText(
                               customer.phone,
                               style: t.bodySmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: AppSpacing.xs),
                       PasalStatusBadge(
                         label: customer.currentBalanceDue > 0
                             ? 'Khata Active'

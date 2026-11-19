@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,7 +26,8 @@ class ShiftOpenLoginScreen extends ConsumerStatefulWidget {
 
 enum _LoginInputMode { onlinePin, onlinePassword, offlineRecovery }
 
-class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
+class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen>
+    with SingleTickerProviderStateMixin {
   final _ownerUsernameController = TextEditingController(text: 'owner');
   final _ownerPasswordController = TextEditingController();
   final _deviceNameController = TextEditingController(text: 'Counter Phone 01');
@@ -35,6 +37,9 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
   final _floatController = TextEditingController(text: '5000');
   final _floatFocusNode = FocusNode();
   final _shiftNotesController = TextEditingController();
+
+  late final AnimationController _pinShakeCtrl;
+  String? _lastShakenError;
 
   String _enteredPin = '';
   final String _platform = _defaultPlatform();
@@ -61,6 +66,10 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
   @override
   void initState() {
     super.initState();
+    _pinShakeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         ref.read(authSessionControllerProvider).initialize();
@@ -70,6 +79,7 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
 
   @override
   void dispose() {
+    _pinShakeCtrl.dispose();
     _ownerUsernameController.dispose();
     _ownerPasswordController.dispose();
     _deviceNameController.dispose();
@@ -240,6 +250,23 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
       _seededFromShiftId = null;
     }
 
+    if (s.stage == AuthGateStage.locked &&
+        s.errorMessage != null &&
+        s.errorMessage != _lastShakenError) {
+      _lastShakenError = s.errorMessage;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        HapticFeedback.heavyImpact();
+        if (!AppMotion.shouldReduceMotion(context)) {
+          _pinShakeCtrl.forward(from: 0.0);
+        }
+      });
+    } else if (s.errorMessage == null) {
+      _lastShakenError = null;
+    }
+
+    final reduceMotion = AppMotion.shouldReduceMotion(context);
+
     return Scaffold(
       backgroundColor: c.surface,
       body: SafeArea(
@@ -265,27 +292,63 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
                           _buildErrorBanner(context, s.errorMessage!),
                           const SizedBox(height: AppSpacing.md),
                         ],
-                        switch (s.stage) {
-                          AuthGateStage.initializing => const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 64),
-                              child: Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            ),
-                          AuthGateStage.revoked =>
-                            _buildRevokedCard(context, authCtrl, s),
-                          AuthGateStage.locked =>
-                            _buildLoginCard(context, s),
-                          AuthGateStage.shiftOpenRequired =>
-                            _buildShiftOpenView(context, authCtrl, s),
-                          AuthGateStage.ready => const SizedBox.shrink(),
-                          AuthGateStage.accountAuthRequired ||
-                          AuthGateStage.emailVerificationRequired ||
-                          AuthGateStage.storeSetupRequired ||
-                          AuthGateStage.deviceApprovalPending ||
-                          AuthGateStage.deviceRejected =>
-                            _buildEnrollTerminalCard(context, s),
-                        },
+                        AnimatedSwitcher(
+                          duration: AppMotion.resolveDuration(
+                            context,
+                            const Duration(milliseconds: 220),
+                          ),
+                          switchInCurve: AppMotion.easeOut,
+                          switchOutCurve: AppMotion.easeOut,
+                          layoutBuilder: (currentChild, previousChildren) {
+                            return Stack(
+                              alignment: Alignment.topCenter,
+                              children: [
+                                ...previousChildren,
+                                ?currentChild,
+                              ],
+                            );
+                          },
+                          transitionBuilder: (child, animation) {
+                            if (reduceMotion) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              );
+                            }
+                            final slide = Tween<Offset>(
+                              begin: const Offset(0.05, 0),
+                              end: Offset.zero,
+                            ).animate(animation);
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(position: slide, child: child),
+                            );
+                          },
+                          child: KeyedSubtree(
+                            key: ValueKey<AuthGateStage>(s.stage),
+                            child: switch (s.stage) {
+                              AuthGateStage.initializing => const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 64),
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                ),
+                              AuthGateStage.revoked =>
+                                _buildRevokedCard(context, authCtrl, s),
+                              AuthGateStage.locked =>
+                                _buildLoginCard(context, s),
+                              AuthGateStage.shiftOpenRequired =>
+                                _buildShiftOpenView(context, authCtrl, s),
+                              AuthGateStage.ready => const SizedBox.shrink(),
+                              AuthGateStage.accountAuthRequired ||
+                              AuthGateStage.emailVerificationRequired ||
+                              AuthGateStage.storeSetupRequired ||
+                              AuthGateStage.deviceApprovalPending ||
+                              AuthGateStage.deviceRejected =>
+                                _buildEnrollTerminalCard(context, s),
+                            },
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -807,25 +870,45 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
 
   Widget _buildPinDots(BuildContext context) {
     final c = context.pasalColors;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(6, (idx) {
-        final filled = idx < _enteredPin.length;
-        return AnimatedContainer(
-          key: ValueKey<String>('pin-dot-$idx'),
-          duration: const Duration(milliseconds: 90),
-          margin: const EdgeInsets.symmetric(horizontal: 7),
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: filled ? c.primary : c.surfaceContainerHighest,
-            border: Border.all(
-              color: filled ? c.primary : c.outlineVariant,
+    final reduceMotion = AppMotion.shouldReduceMotion(context);
+    return AnimatedBuilder(
+      animation: _pinShakeCtrl,
+      builder: (context, child) {
+        final v = _pinShakeCtrl.value;
+        final dx = v == 0.0 || v == 1.0
+            ? 0.0
+            : math.sin(v * math.pi * 3) * (1.0 - v) * 8.0;
+        return Transform.translate(offset: Offset(dx, 0), child: child);
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(6, (idx) {
+          final filled = idx < _enteredPin.length;
+          return AnimatedScale(
+            scale: filled || reduceMotion ? 1.0 : 0.85,
+            duration: reduceMotion
+                ? Duration.zero
+                : const Duration(milliseconds: 100),
+            curve: AppMotion.easeOut,
+            child: AnimatedContainer(
+              key: ValueKey<String>('pin-dot-$idx'),
+              duration: reduceMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 90),
+              margin: const EdgeInsets.symmetric(horizontal: 7),
+              width: 14,
+              height: 14,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: filled ? c.primary : c.surfaceContainerHighest,
+                border: Border.all(
+                  color: filled ? c.primary : c.outlineVariant,
+                ),
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     );
   }
 
@@ -865,6 +948,7 @@ class _ShiftOpenLoginScreenState extends ConsumerState<ShiftOpenLoginScreen> {
             final isControl = label == 'CLR' || label == 'DEL';
             return PasalPressable(
               key: ValueKey<String>('pin-key-$label'),
+              haptic: PasalHaptic.selection,
               borderRadius: BorderRadius.circular(AppRadii.md),
               onTap: () {
                 if (label == 'CLR') {

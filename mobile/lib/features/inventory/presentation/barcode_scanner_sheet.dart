@@ -23,10 +23,8 @@ Future<String?> showBarcodeScannerSheet(
   String title = 'Scan Sticker or Manufacturer Barcode',
   String hintText = 'Enter barcode manually (e.g. 01100024)',
 }) {
-  return showModalBottomSheet<String>(
+  return showPasalBottomSheet<String>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _BarcodeScannerSheet(title: title, hintText: hintText),
   );
 }

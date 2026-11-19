@@ -68,7 +68,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _showEditShopProfileDialog() async {
     final cfg = ref.read(printerConfigProvider);
-    final result = await showDialog<({String name, String pan, String phone})>(
+    final result = await showPasalDialog<({String name, String pan, String phone})>(
       context: context,
       builder: (ctx) => _EditShopProfileDialog(
         initialName: cfg.storeName,
@@ -116,7 +116,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
     if (res.unsyncedCount > 0) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showPasalDialog<bool>(
         context: context,
         builder: (ctx) => _LeaveUnsyncedConfirmDialog(
           unsyncedCount: res.unsyncedCount,
@@ -139,7 +139,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _confirmRevokeDevice(RegisteredDevice device) async {
     final currentCode = ref.read(ramKeyHolderProvider).session?.deviceCode;
     final isSelf = currentCode != null && device.code == currentCode;
-    final reason = await showDialog<String>(
+    final reason = await showPasalDialog<String>(
       context: context,
       builder: (ctx) => _RevokeDeviceDialog(
         device: device,
@@ -173,12 +173,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return 'PX';
-    if (parts.length == 1) return parts[0].substring(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
-    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
-  }
+  String _initials(String name) =>
+      PasalTextUtils.initials(name, fallback: 'PX');
 
   String _roleLabel(String? role) {
     return switch (role) {
@@ -736,10 +732,11 @@ class _RevokeDeviceDialogState extends State<_RevokeDeviceDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: c.error),
-          onPressed: () => Navigator.of(context).pop(_reasonCtrl.text.trim()),
-          child: const Text('Revoke Access'),
+        PasalHoldToConfirmButton(
+          label: 'Hold to Revoke Access',
+          holdingLabel: 'Keep holding to revoke...',
+          icon: Icons.phonelink_erase_rounded,
+          onConfirmed: () => Navigator.of(context).pop(_reasonCtrl.text.trim()),
         ),
       ],
     );

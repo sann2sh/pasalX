@@ -45,13 +45,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
   void _openSmartIntake({String? productId, String? variantId}) {
     final canManage = ref.read(canManageInventoryProvider);
     if (!canManage) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
+      ref.read(pasalAlertProvider.notifier).showWarning(
             'Stock intake is restricted to Manager or Store Owner accounts.',
-          ),
-        ),
-      );
+          );
       return;
     }
 
@@ -78,15 +74,20 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
     final stockValuePaisa = ref.watch(ownerStockValuePaisaProvider);
     final asyncNodes = ref.watch(catalogNodesProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.gutterMobile,
-        AppSpacing.sm,
-        AppSpacing.gutterMobile,
-        AppSpacing.xl,
-      ),
-      children: [
-        // Search / Scan Bar + Inward CTA
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.gutterMobile,
+            AppSpacing.sm,
+            AppSpacing.gutterMobile,
+            0,
+          ),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Search / Scan Bar + Inward CTA
         Row(
           children: [
             Expanded(
@@ -158,7 +159,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
 
         // Category Filter Pills
         SizedBox(
-          height: 40,
+          height: MediaQuery.textScalerOf(context).scale(16) + 26,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
@@ -230,13 +231,15 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       ),
                       const SizedBox(height: 2),
                       PasalTabularText(
-                        '${stats.activeProductCount} SKUs',
+                        PasalTextUtils.plural(stats.activeProductCount, 'SKU'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: t.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text(
-                        '${stats.totalUnits} units',
+                        PasalTextUtils.plural(stats.totalUnits, 'unit'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: t.bodySmall?.copyWith(
@@ -282,7 +285,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
                       ),
                       const SizedBox(height: 2),
                       PasalTabularText(
-                        '${stats.lowReserveCount} Alerts',
+                        PasalTextUtils.plural(stats.lowReserveCount, 'Alert'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: t.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                           color: stats.lowReserveCount > 0
@@ -348,38 +353,68 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> {
           ],
         ),
         const SizedBox(height: AppSpacing.md),
+              ],
+            ),
+          ),
+        ),
 
-        // Loading / Empty / Compact Product Cards
+        // Loading / Empty / Virtualized SliverList of Compact Product Cards
         if (asyncNodes.isLoading && filteredNodes.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 48),
-            child: Center(child: CircularProgressIndicator()),
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 48),
+              child: Center(child: CircularProgressIndicator()),
+            ),
           )
         else if (filteredNodes.isEmpty)
-          _EmptyCatalogCard(
-            hasActiveFilters: filter.query.isNotEmpty ||
-                filter.selectedCategory != null ||
-                filter.lowReserveOnly ||
-                filter.expiringOnly ||
-                filter.lowOrExpiringOnly,
-            canManage: canManage,
-            onClearFilters: () {
-              _searchController.clear();
-              ref.read(catalogFilterProvider.notifier).clearAll();
-            },
-            onOpenIntake: () => _openSmartIntake(),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.gutterMobile,
+              0,
+              AppSpacing.gutterMobile,
+              AppSpacing.xl,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: _EmptyCatalogCard(
+                hasActiveFilters: filter.query.isNotEmpty ||
+                    filter.selectedCategory != null ||
+                    filter.lowReserveOnly ||
+                    filter.expiringOnly ||
+                    filter.lowOrExpiringOnly,
+                canManage: canManage,
+                onClearFilters: () {
+                  _searchController.clear();
+                  ref.read(catalogFilterProvider.notifier).clearAll();
+                },
+                onOpenIntake: () => _openSmartIntake(),
+              ),
+            ),
           )
         else
-          ...filteredNodes.map(
-            (node) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: _ProductCompactCard(
-                node: node,
-                canManage: canManage,
-                canViewCost: canViewCost,
-                onTapCard: () =>
-                    context.push('/inventory/product/${node.product.id}'),
-              ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.gutterMobile,
+              0,
+              AppSpacing.gutterMobile,
+              AppSpacing.xl,
+            ),
+            sliver: SliverList.builder(
+              itemCount: filteredNodes.length,
+              itemBuilder: (context, index) {
+                final node = filteredNodes[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: RepaintBoundary(
+                    child: _ProductCompactCard(
+                      node: node,
+                      canManage: canManage,
+                      canViewCost: canViewCost,
+                      onTapCard: () =>
+                          context.push('/inventory/product/${node.product.id}'),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
       ],

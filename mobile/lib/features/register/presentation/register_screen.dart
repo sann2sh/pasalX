@@ -70,7 +70,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final session = ref.read(ramKeyHolderProvider).session;
     if (repo == null || session == null) return;
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showPasalDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Sync & Punch Out?'),
@@ -101,20 +101,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       await ref.read(syncOutboxWorkerProvider).syncNow();
       final pendingCount = ref.read(syncOutboxWorkerProvider).status.pendingCount;
       if (mounted && pendingCount > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
+        ref.read(pasalAlertProvider.notifier).showWarning(
               'Punched out offline: $pendingCount change(s) queued to sync on next sign-in.',
-            ),
-          ),
-        );
+            );
       }
       await ref.read(authSessionControllerProvider).logout();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Punch-out failed: $e')),
-        );
+        ref.read(pasalAlertProvider.notifier).showError(
+              'Punch-out failed: $e',
+            );
       }
     } finally {
       if (mounted) setState(() => _punchingOut = false);

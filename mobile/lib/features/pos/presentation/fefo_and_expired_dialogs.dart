@@ -16,7 +16,7 @@ Future<void> showExpiredBatchBlockedDialog(
   PosScannedBatch batch,
 ) {
   HapticFeedback.heavyImpact();
-  return showDialog<void>(
+  return showPasalDialog<void>(
     context: context,
     barrierDismissible: true,
     builder: (ctx) {
@@ -102,7 +102,7 @@ Future<PosScannedBatch?> showFefoWarningDialog(
   required PosScannedBatch older,
 }) {
   HapticFeedback.mediumImpact();
-  return showDialog<PosScannedBatch>(
+  return showPasalDialog<PosScannedBatch>(
     context: context,
     barrierDismissible: true,
     builder: (ctx) {

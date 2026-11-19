@@ -29,7 +29,7 @@ Future<QuickPadEntryResult?> showQuickPadEntryDialog(
   BuildContext context,
   PosScannedBatch item,
 ) {
-  return showDialog<QuickPadEntryResult>(
+  return showPasalDialog<QuickPadEntryResult>(
     context: context,
     builder: (ctx) => _QuickPadEntryDialog(item: item),
   );
@@ -282,18 +282,17 @@ class QuickPadGrid extends StatelessWidget {
       ),
       itemBuilder: (context, index) {
         final item = items[index];
-        return Material(
-          color: c.surfaceContainerLowest,
+        return PasalPressable(
+          haptic: PasalHaptic.selection,
+          onTap: () => onItemSelected(item),
           borderRadius: BorderRadius.circular(AppRadii.md),
-          child: InkWell(
-            onTap: () => onItemSelected(item),
-            borderRadius: BorderRadius.circular(AppRadii.md),
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadii.md),
-                border: Border.all(color: c.hairline),
-              ),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: c.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(AppRadii.md),
+              border: Border.all(color: c.hairline),
+            ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -321,7 +320,6 @@ class QuickPadGrid extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
           ),
         );
       },
@@ -515,62 +513,60 @@ class _QuickPadScreenState extends ConsumerState<QuickPadScreen> {
                         itemBuilder: (context, index) {
                           final item = visible[index];
                           final isSelected = _selected?.batchId == item.batchId;
-                          return Material(
-                            color: c.surfaceContainerLowest,
+                          return PasalPressable(
+                            haptic: PasalHaptic.selection,
+                            onTap: () => _selectItem(item),
                             borderRadius: BorderRadius.circular(AppRadii.md),
-                            child: InkWell(
-                              onTap: () => _selectItem(item),
-                              borderRadius: BorderRadius.circular(AppRadii.md),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadii.md),
-                                  border: Border.all(
-                                    color: isSelected ? c.primary : c.hairline,
-                                    width: isSelected ? 2 : 1,
-                                  ),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: c.surfaceContainerLowest,
+                                borderRadius:
+                                    BorderRadius.circular(AppRadii.md),
+                                border: Border.all(
+                                  color: isSelected ? c.primary : c.hairline,
+                                  width: isSelected ? 2 : 1,
                                 ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      _iconForName(item.productName),
-                                      size: 22,
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    _iconForName(item.productName),
+                                    size: 22,
+                                    color: isSelected
+                                        ? c.primary
+                                        : c.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    item.productName,
+                                    style: t.labelMedium?.copyWith(
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w600,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  PasalTabularText(
+                                    item.sellingPricePaisa > 0
+                                        ? MoneyUtils.formatRs(
+                                            item.sellingPricePaisa,
+                                          )
+                                        : 'Any Price',
+                                    style: t.labelSmall?.copyWith(
                                       color: isSelected
                                           ? c.primary
                                           : c.onSurfaceVariant,
+                                      fontWeight: FontWeight.w600,
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.productName,
-                                      style: t.labelMedium?.copyWith(
-                                        fontWeight: isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.w600,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    PasalTabularText(
-                                      item.sellingPricePaisa > 0
-                                          ? MoneyUtils.formatRs(
-                                              item.sellingPricePaisa,
-                                            )
-                                          : 'Any Price',
-                                      style: t.labelSmall?.copyWith(
-                                        color: isSelected
-                                            ? c.primary
-                                            : c.onSurfaceVariant,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ),
                           );
@@ -700,34 +696,36 @@ class _QuickPadScreenState extends ConsumerState<QuickPadScreen> {
                             '0',
                             '⌫',
                           ])
-                            Material(
-                              color: (key == 'CLR' || key == '⌫')
-                                  ? c.surfaceContainer
-                                  : c.surfaceContainerLow,
+                            PasalPressable(
+                              haptic: PasalHaptic.selection,
                               borderRadius: BorderRadius.circular(AppRadii.md),
-                              child: InkWell(
-                                borderRadius:
-                                    BorderRadius.circular(AppRadii.md),
-                                onTap: () {
-                                  if (key == 'CLR') {
-                                    _tapClear();
-                                  } else if (key == '⌫') {
-                                    _tapBackspace();
-                                  } else {
-                                    _tapDigit(key);
-                                  }
-                                },
-                                child: Center(
-                                  child: Text(
-                                    key,
-                                    style: (key == 'CLR' || key == '⌫')
-                                        ? t.labelLarge?.copyWith(
-                                            color: c.onSurfaceVariant,
-                                          )
-                                        : t.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                  ),
+                              onTap: () {
+                                if (key == 'CLR') {
+                                  _tapClear();
+                                } else if (key == '⌫') {
+                                  _tapBackspace();
+                                } else {
+                                  _tapDigit(key);
+                                }
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: (key == 'CLR' || key == '⌫')
+                                      ? c.surfaceContainer
+                                      : c.surfaceContainerLow,
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadii.md),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  key,
+                                  style: (key == 'CLR' || key == '⌫')
+                                      ? t.labelLarge?.copyWith(
+                                          color: c.onSurfaceVariant,
+                                        )
+                                      : t.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                 ),
                               ),
                             ),

@@ -26,10 +26,8 @@ Future<CustomerRow?> showKhataCustomerSheet(
   bool selectionMode = true,
   ValueChanged<PosScannedBatch>? onAddShadeBatchToCart,
 }) {
-  return showModalBottomSheet<CustomerRow>(
+  return showPasalBottomSheet<CustomerRow>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
     builder: (ctx) => _KhataCustomerSheet(
       selectionMode: selectionMode,
       onAddShadeBatchToCart: onAddShadeBatchToCart,
@@ -84,7 +82,7 @@ class _KhataCustomerSheetState extends ConsumerState<_KhataCustomerSheet> {
     final notesCtrl = TextEditingController();
     String? errorText;
 
-    final created = await showDialog<CustomerRow>(
+    final created = await showPasalDialog<CustomerRow>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -181,7 +179,7 @@ class _KhataCustomerSheetState extends ConsumerState<_KhataCustomerSheet> {
     var method = 'CASH';
     String? errorText;
 
-    final paid = await showDialog<bool>(
+    final paid = await showPasalDialog<bool>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -278,7 +276,7 @@ class _KhataCustomerSheetState extends ConsumerState<_KhataCustomerSheet> {
     final shadeCtrl = TextEditingController();
     String? errorText;
 
-    final saved = await showDialog<bool>(
+    final saved = await showPasalDialog<bool>(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(
@@ -367,13 +365,9 @@ class _KhataCustomerSheetState extends ConsumerState<_KhataCustomerSheet> {
     final match = await repo.findBestBatchForShadeProfile(profile, role: role);
     if (!mounted) return;
     if (match == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      ref.read(pasalAlertProvider.notifier).showWarning(
             'No active batch found for ${profile.productName} (${profile.shadeVariant}).',
-          ),
-        ),
-      );
+          );
       return;
     }
 
@@ -382,13 +376,9 @@ class _KhataCustomerSheetState extends ConsumerState<_KhataCustomerSheet> {
     } else {
       ref.read(posCartProvider.notifier).addBatch(match);
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
+    ref.read(pasalAlertProvider.notifier).showSuccess(
           'Added ${match.productName} • ${match.variantName} to cart.',
-        ),
-      ),
-    );
+        );
   }
 
   @override

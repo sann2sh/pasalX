@@ -103,49 +103,40 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 (e.paidTo ?? '').toLowerCase().contains(q);
           }).toList(growable: false);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.gutterMobile,
-        AppSpacing.md,
-        AppSpacing.gutterMobile,
-        AppSpacing.lg,
-      ),
-      children: [
-        // 3-Way Segmented Tabs
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: c.surfaceContainer,
-            borderRadius: BorderRadius.circular(AppRadii.md),
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.gutterMobile,
+            AppSpacing.md,
+            AppSpacing.gutterMobile,
+            0,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _SegmentButton(
-                  label: 'Sales (${sales.length})',
-                  active: effectiveTab == _HistoryTab.sales,
-                  onTap: () => setState(() => _activeTab = _HistoryTab.sales),
-                ),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 3-Way Segmented Tabs with clip-path pill glide
+        PasalClipSegmentedTabs<_HistoryTab>(
+          selectedValue: effectiveTab,
+          activePillColor: c.primary,
+          activeForegroundColor: c.onPrimary,
+          onChanged: (tab) => setState(() => _activeTab = tab),
+          options: [
+            PasalSegmentOption<_HistoryTab>(
+              value: _HistoryTab.sales,
+              label: 'Sales (${sales.length})',
+            ),
+            if (canViewPurchases)
+              PasalSegmentOption<_HistoryTab>(
+                value: _HistoryTab.purchases,
+                label: 'Purchases (${purchases.length})',
               ),
-              if (canViewPurchases)
-                Expanded(
-                  child: _SegmentButton(
-                    label: 'Purchases (${purchases.length})',
-                    active: effectiveTab == _HistoryTab.purchases,
-                    onTap: () =>
-                        setState(() => _activeTab = _HistoryTab.purchases),
-                  ),
-                ),
-              Expanded(
-                child: _SegmentButton(
-                  label: 'Expenses (${expenses.length})',
-                  active: effectiveTab == _HistoryTab.expenses,
-                  onTap: () =>
-                      setState(() => _activeTab = _HistoryTab.expenses),
-                ),
-              ),
-            ],
-          ),
+            PasalSegmentOption<_HistoryTab>(
+              value: _HistoryTab.expenses,
+              label: 'Expenses (${expenses.length})',
+            ),
+          ],
         ),
         const SizedBox(height: 12),
 
@@ -263,188 +254,242 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ],
         ),
         const SizedBox(height: 14),
+              ],
+            ),
+          ),
+        ),
 
-        // Tab Body
+        // Virtualized Tab Body
         if (effectiveTab == _HistoryTab.sales) ...[
           if (filteredSales.isEmpty)
-            _EmptyHistoryCard(
-              icon: Icons.receipt_long_outlined,
-              message: _todayOnly
-                  ? 'No bills recorded today yet.'
-                  : 'No matching sales bills found.',
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutterMobile,
+                0,
+                AppSpacing.gutterMobile,
+                AppSpacing.lg,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: _EmptyHistoryCard(
+                  icon: Icons.receipt_long_outlined,
+                  message: _todayOnly
+                      ? 'No bills recorded today yet.'
+                      : 'No matching sales bills found.',
+                ),
+              ),
             )
           else
-            ...filteredSales.map(
-              (bundle) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _SaleHistoryRow(
-                  bundle: bundle,
-                  showDate: !_todayOnly,
-                  onTap: () => context.push(
-                    AppRoutes.saleDetail(bundle.order.id),
-                  ),
-                ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutterMobile,
+                0,
+                AppSpacing.gutterMobile,
+                AppSpacing.lg,
+              ),
+              sliver: SliverList.builder(
+                itemCount: filteredSales.length,
+                itemBuilder: (context, index) {
+                  final bundle = filteredSales[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: RepaintBoundary(
+                      child: _SaleHistoryRow(
+                        bundle: bundle,
+                        showDate: !_todayOnly,
+                        onTap: () => context.push(
+                          AppRoutes.saleDetail(bundle.order.id),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
         ] else if (effectiveTab == _HistoryTab.purchases) ...[
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'SUPPLIER INVOICES',
-                  style: t.labelSmall?.copyWith(
-                    color: c.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => context.push(AppRoutes.inventoryIntake),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  '+ Inward Stock',
-                  style: t.labelMedium?.copyWith(
-                    color: c.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (filteredPurchases.isEmpty)
-            const _EmptyHistoryCard(
-              icon: Icons.inventory_2_outlined,
-              message: 'No purchase invoices recorded yet.',
-            )
-          else
-            ...filteredPurchases.map(
-              (bundle) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _PurchaseHistoryRow(
-                  bundle: bundle,
-                  onTap: () => context.push(
-                    AppRoutes.purchaseDetail(bundle.invoice.id),
-                  ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.gutterMobile,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'SUPPLIER INVOICES',
+                        style: t.labelSmall?.copyWith(
+                          color: c.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => context.push(AppRoutes.inventoryIntake),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        '+ Inward Stock',
+                        style: t.labelMedium?.copyWith(
+                          color: c.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-        ] else ...[
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'DAILY PETTY CASH & EXPENSES',
-                  style: t.labelSmall?.copyWith(
-                    color: c.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () async {
-                  final saved = await showPettyExpenseSheet(
-                    context,
-                    ref,
-                    shiftId: activeShift?.id,
-                  );
-                  if (saved == true && context.mounted) {
-                    ref.read(pasalAlertProvider).showSuccess(
-                          'Expense added to register',
-                        );
-                  }
-                },
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  '+ Add Expense',
-                  style: t.labelMedium?.copyWith(
-                    color: c.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
           ),
-          const SizedBox(height: 8),
-          if (filteredExpenses.isEmpty)
-            const _EmptyHistoryCard(
-              icon: Icons.payments_outlined,
-              message: 'No petty expenses logged for this period.',
+          if (filteredPurchases.isEmpty)
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.gutterMobile,
+                0,
+                AppSpacing.gutterMobile,
+                AppSpacing.lg,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: _EmptyHistoryCard(
+                  icon: Icons.inventory_2_outlined,
+                  message: 'No purchase invoices recorded yet.',
+                ),
+              ),
             )
           else
-            ...filteredExpenses.map(
-              (expense) => Padding(
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutterMobile,
+                0,
+                AppSpacing.gutterMobile,
+                AppSpacing.lg,
+              ),
+              sliver: SliverList.builder(
+                itemCount: filteredPurchases.length,
+                itemBuilder: (context, index) {
+                  final bundle = filteredPurchases[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: RepaintBoundary(
+                      child: _PurchaseHistoryRow(
+                        bundle: bundle,
+                        onTap: () => context.push(
+                          AppRoutes.purchaseDetail(bundle.invoice.id),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ] else ...[
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.gutterMobile,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _ExpenseHistoryRow(
-                  expense: expense,
-                  showDate: !_todayOnly,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'DAILY PETTY CASH & EXPENSES',
+                        style: t.labelSmall?.copyWith(
+                          color: c.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () async {
+                        final saved = await showPettyExpenseSheet(
+                          context,
+                          ref,
+                          shiftId: activeShift?.id,
+                        );
+                        if (saved == true && context.mounted) {
+                          ref.read(pasalAlertProvider).showSuccess(
+                                'Expense added to register',
+                              );
+                        }
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        '+ Add Expense',
+                        style: t.labelMedium?.copyWith(
+                          color: c.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+            ),
+          ),
+          if (filteredExpenses.isEmpty)
+            const SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                AppSpacing.gutterMobile,
+                0,
+                AppSpacing.gutterMobile,
+                AppSpacing.lg,
+              ),
+              sliver: SliverToBoxAdapter(
+                child: _EmptyHistoryCard(
+                  icon: Icons.payments_outlined,
+                  message: 'No petty expenses logged for this period.',
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.gutterMobile,
+                0,
+                AppSpacing.gutterMobile,
+                AppSpacing.lg,
+              ),
+              sliver: SliverList.builder(
+                itemCount: filteredExpenses.length,
+                itemBuilder: (context, index) {
+                  final expense = filteredExpenses[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: RepaintBoundary(
+                      child: _ExpenseHistoryRow(
+                        expense: expense,
+                        showDate: !_todayOnly,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
         ],
       ],
-    );
-  }
-}
-
-class _SegmentButton extends StatelessWidget {
-  const _SegmentButton({
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.pasalColors;
-    final t = context.textTheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: AppMotion.popover,
-        curve: AppMotion.easeOut,
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-        decoration: BoxDecoration(
-          color: active ? c.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadii.sm),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: t.labelMedium?.copyWith(
-            fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-            color: active ? c.onPrimary : c.onSurfaceVariant,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
     );
   }
 }
