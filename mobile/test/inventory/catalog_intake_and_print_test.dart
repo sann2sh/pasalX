@@ -18,6 +18,7 @@ import 'package:pasalx_mobile/core/printer/printer.dart';
 import 'package:pasalx_mobile/core/providers/foundation_providers.dart';
 import 'package:pasalx_mobile/core/security/ram_key_holder.dart';
 import 'package:pasalx_mobile/core/theme/app_theme.dart';
+import 'package:pasalx_mobile/core/theme/pasal_alert.dart';
 import 'package:pasalx_mobile/features/inventory/data/inventory_repository.dart';
 import 'package:pasalx_mobile/features/inventory/domain/catalog_models.dart';
 import 'package:pasalx_mobile/features/inventory/presentation/inventory_screen.dart';
@@ -540,6 +541,9 @@ void main() {
         child: MaterialApp.router(
           theme: AppTheme.light(),
           routerConfig: router,
+          builder: (context, child) => PasalAlertOverlay(
+            child: child ?? const SizedBox.shrink(),
+          ),
         ),
       );
     }
