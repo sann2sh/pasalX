@@ -1,4 +1,4 @@
-import 'package:flutter/animation.dart';
+import 'package:flutter/widgets.dart';
 
 /// Design spacing & radius tokens mapped from the Stitch Tailwind config.
 abstract final class AppSpacing {
@@ -34,8 +34,32 @@ abstract final class AppMotion {
   static const Curve easeDrawer = Cubic(0.32, 0.72, 0.0, 1.0);
 
   static const Duration buttonPress = Duration(milliseconds: 120);
+  static const Duration buttonRelease = Duration(milliseconds: 150);
   static const Duration popover = Duration(milliseconds: 180);
+  static const Duration popoverExit = Duration(milliseconds: 130);
+  static const Duration alertEnter = Duration(milliseconds: 220);
+  static const Duration alertExit = Duration(milliseconds: 160);
   static const Duration modalSheet = Duration(milliseconds: 260);
+  static const Duration modalSheetExit = Duration(milliseconds: 200);
+  static const Duration holdConfirm = Duration(milliseconds: 2000);
+  static const Duration holdSnapBack = Duration(milliseconds: 200);
+  static const Duration staggerStep = Duration(milliseconds: 40);
   static const double pressScale = 0.97;
+  static const double enterScale = 0.95;
+
+  /// Respects OS "Remove animations" / `prefers-reduced-motion` accessibility flag.
+  static bool shouldReduceMotion(BuildContext context) {
+    return MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+  }
+
+  /// Returns a gentle reduced duration (120ms) when reduced motion is requested,
+  /// keeping opacity/color comprehension without abrupt snaps.
+  static Duration resolveDuration(
+    BuildContext context,
+    Duration normal, {
+    Duration reduced = const Duration(milliseconds: 120),
+  }) {
+    return shouldReduceMotion(context) ? reduced : normal;
+  }
 }
 

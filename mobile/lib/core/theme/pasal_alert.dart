@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -38,10 +40,14 @@ class PasalAlertMessage {
 /// Controls the single active floating subtle alert across the app.
 class PasalAlertController extends ChangeNotifier {
   Timer? _autoDismissTimer;
+  DateTime? _timerStartedAt;
+  Duration? _remainingDuration;
+  bool _isPaused = false;
   PasalAlertMessage? _current;
   int _nextId = 0;
 
   PasalAlertMessage? get current => _current;
+  bool get isTimerPaused => _isPaused;
 
   /// Displays a floating semantic popup at the top of the viewport.
   void show(
@@ -52,6 +58,8 @@ class PasalAlertController extends ChangeNotifier {
     Duration duration = const Duration(milliseconds: 3500),
   }) {
     _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
+    _isPaused = false;
     _current = PasalAlertMessage(
       id: ++_nextId,
       severity: severity,
@@ -60,11 +68,42 @@ class PasalAlertController extends ChangeNotifier {
       onAction: onAction,
       duration: duration,
     );
+    _remainingDuration = duration > Duration.zero ? duration : null;
     notifyListeners();
 
-    if (duration > Duration.zero) {
-      _autoDismissTimer = Timer(duration, dismiss);
+    _startTimerIfNeeded();
+  }
+
+  void _startTimerIfNeeded() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
+    final rem = _remainingDuration;
+    if (_isPaused || rem == null || rem <= Duration.zero) return;
+    _timerStartedAt = DateTime.now();
+    _autoDismissTimer = Timer(rem, dismiss);
+  }
+
+  /// Pauses the auto-dismiss countdown while the user is touching/reading the alert.
+  void pauseTimer() {
+    if (_isPaused || _current == null) return;
+    _isPaused = true;
+    if (_autoDismissTimer != null &&
+        _timerStartedAt != null &&
+        _remainingDuration != null) {
+      final elapsed = DateTime.now().difference(_timerStartedAt!);
+      final left = _remainingDuration! - elapsed;
+      _remainingDuration = left > Duration.zero ? left : const Duration(milliseconds: 250);
     }
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
+    _timerStartedAt = null;
+  }
+
+  /// Resumes the auto-dismiss countdown when the user lifts their finger.
+  void resumeTimer() {
+    if (!_isPaused || _current == null) return;
+    _isPaused = false;
+    _startTimerIfNeeded();
   }
 
   /// Displays a subtle amber warning popup.
@@ -119,6 +158,9 @@ class PasalAlertController extends ChangeNotifier {
   void dismiss() {
     _autoDismissTimer?.cancel();
     _autoDismissTimer = null;
+    _timerStartedAt = null;
+    _remainingDuration = null;
+    _isPaused = false;
     if (_current == null) return;
     _current = null;
     notifyListeners();
@@ -187,7 +229,7 @@ class PasalAlertBanner extends StatelessWidget {
       type: MaterialType.transparency,
       child: Container(
         key: ValueKey<String>('pasal-alert-${alert.severity.name}'),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.fromLTRB(14, 6, 4, 6),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(AppRadii.xl),
@@ -243,19 +285,23 @@ class PasalAlertBanner extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(width: 4),
+            const SizedBox(width: 2),
             Semantics(
               button: true,
               label: 'Dismiss alert',
               child: InkWell(
+                key: const ValueKey<String>('pasal-alert-dismiss-btn'),
                 borderRadius: BorderRadius.circular(AppRadii.pill),
                 onTap: onDismiss,
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    Icons.close_rounded,
-                    size: 16,
-                    color: fg.withValues(alpha: 0.75),
+                child: SizedBox(
+                  width: AppSpacing.minTouchTarget,
+                  height: AppSpacing.minTouchTarget,
+                  child: Center(
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: fg.withValues(alpha: 0.75),
+                    ),
                   ),
                 ),
               ),
@@ -281,6 +327,7 @@ class PasalAlertOverlay extends ConsumerWidget {
     final controller = ref.watch(pasalAlertProvider);
     final alert = controller.current;
     final topPadding = MediaQuery.paddingOf(context).top;
+    final reduceMotion = AppMotion.shouldReduceMotion(context);
 
     return Stack(
       children: [
@@ -290,12 +337,19 @@ class PasalAlertOverlay extends ConsumerWidget {
           left: 14,
           right: 14,
           child: AnimatedSwitcher(
-            duration: AppMotion.popover,
+            duration: AppMotion.resolveDuration(context, AppMotion.alertEnter),
+            reverseDuration: AppMotion.resolveDuration(
+              context,
+              AppMotion.alertExit,
+            ),
             switchInCurve: AppMotion.easeOut,
             switchOutCurve: AppMotion.easeOut,
             transitionBuilder: (widget, animation) {
+              if (reduceMotion) {
+                return FadeTransition(opacity: animation, child: widget);
+              }
               final slide = Tween<Offset>(
-                begin: const Offset(0, -0.18),
+                begin: const Offset(0, -1.0),
                 end: Offset.zero,
               ).animate(animation);
               return FadeTransition(
@@ -305,14 +359,119 @@ class PasalAlertOverlay extends ConsumerWidget {
             },
             child: alert == null
                 ? const SizedBox.shrink()
-                : PasalAlertBanner(
+                : Listener(
                     key: ValueKey<int>(alert.id),
-                    alert: alert,
-                    onDismiss: controller.dismiss,
+                    onPointerDown: (_) => controller.pauseTimer(),
+                    onPointerUp: (_) => controller.resumeTimer(),
+                    onPointerCancel: (_) => controller.resumeTimer(),
+                    child: _SwipeDismissAlertWrapper(
+                      onDismiss: controller.dismiss,
+                      child: PasalAlertBanner(
+                        alert: alert,
+                        onDismiss: controller.dismiss,
+                      ),
+                    ),
                   ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 1:1 vertical swipe-up-to-dismiss wrapper with downward rubber-band damping
+/// and critically damped spring snap-back (`gestures` & `apple-design`).
+class _SwipeDismissAlertWrapper extends StatefulWidget {
+  const _SwipeDismissAlertWrapper({
+    required this.onDismiss,
+    required this.child,
+  });
+
+  final VoidCallback onDismiss;
+  final Widget child;
+
+  @override
+  State<_SwipeDismissAlertWrapper> createState() =>
+      _SwipeDismissAlertWrapperState();
+}
+
+class _SwipeDismissAlertWrapperState extends State<_SwipeDismissAlertWrapper>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _dragCtrl;
+
+  static const SpringDescription _snapSpring = SpringDescription(
+    mass: 1.0,
+    stiffness: 380.0,
+    damping: 39.0, // ~1.0 damping ratio (critically damped)
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _dragCtrl = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _dragCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _dragCtrl.stop();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    final delta = details.primaryDelta ?? 0.0;
+    final next = _dragCtrl.value + delta;
+    if (next <= 0.0) {
+      _dragCtrl.value = next;
+    } else {
+      // Rubber-band resistance when pulling downward against the top anchor.
+      _dragCtrl.value = _dragCtrl.value + delta * 0.25;
+    }
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0.0;
+    // Dismiss if dragged >= 28px up or flicked faster than 0.11 px/ms (110 px/s).
+    if (_dragCtrl.value <= -28.0 || velocity < -110.0) {
+      HapticFeedback.lightImpact();
+      widget.onDismiss();
+      return;
+    }
+    _dragCtrl.animateWith(
+      SpringSimulation(_snapSpring, _dragCtrl.value, 0.0, velocity),
+    );
+  }
+
+  void _onDragCancel() {
+    _dragCtrl.animateWith(
+      SpringSimulation(_snapSpring, _dragCtrl.value, 0.0, 0.0),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onVerticalDragStart: _onDragStart,
+      onVerticalDragUpdate: _onDragUpdate,
+      onVerticalDragEnd: _onDragEnd,
+      onVerticalDragCancel: _onDragCancel,
+      child: AnimatedBuilder(
+        animation: _dragCtrl,
+        builder: (context, child) {
+          final dy = _dragCtrl.value;
+          final opacity =
+              dy < 0 ? (1.0 - (-dy / 96.0)).clamp(0.25, 1.0) : 1.0;
+          return Transform.translate(
+            offset: Offset(0, dy),
+            child: Opacity(opacity: opacity, child: child),
+          );
+        },
+        child: widget.child,
+      ),
     );
   }
 }
