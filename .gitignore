@@ -6,6 +6,7 @@
 
 # Environment & Secrets
 .env*
+!.env.example
 *.pem
 *.key
 *.jks
@@ -26,3 +27,6 @@ mobile/coverage/
 
 # Node / Misc
 /node_modules
+
+# Local Documentation & Internal Planning
+docs/
