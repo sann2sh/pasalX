@@ -60,16 +60,7 @@ const List<_NavTabSpec> _tabs = [
 
 /// Derives two-letter uppercase initials for the single topbar profile avatar.
 String _profileInitials(ActiveLeaseSession? session) {
-  final raw = session?.username.trim() ?? '';
-  if (raw.isEmpty) return 'PX';
-  final parts = raw.split(RegExp(r'[\s._-]+')).where((p) => p.isNotEmpty).toList();
-  if (parts.length >= 2) {
-    return '${parts.first[0]}${parts[1][0]}'.toUpperCase();
-  }
-  if (raw.length >= 2) {
-    return raw.substring(0, 2).toUpperCase();
-  }
-  return raw.toUpperCase();
+  return PasalTextUtils.initials(session?.username ?? '', fallback: 'PX');
 }
 
 String _displayFirstName(ActiveLeaseSession? session) {
@@ -148,7 +139,10 @@ class PasalStackAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 IconButton(
                   tooltip: 'Back',
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                  constraints: const BoxConstraints.tightFor(
+                    width: AppSpacing.minTouchTarget,
+                    height: AppSpacing.minTouchTarget,
+                  ),
                   icon: Icon(Icons.arrow_back_rounded, color: c.onSurface, size: 22),
                   onPressed: onBack ??
                       () {
@@ -161,35 +155,39 @@ class PasalStackAppBar extends ConsumerWidget implements PreferredSizeWidget {
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: t.headlineSmall?.copyWith(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.3,
-                          height: 1.1,
-                        ),
-                      ),
-                      if (subtitle != null && subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         Text(
-                          subtitle!.toUpperCase(),
+                          title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: t.labelSmall?.copyWith(
-                            color: c.outline,
-                            letterSpacing: 0.9,
-                            fontSize: 10,
+                          style: t.headlineSmall?.copyWith(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.3,
+                            height: 1.1,
                           ),
                         ),
+                        if (subtitle != null && subtitle!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.labelSmall?.copyWith(
+                              color: c.outline,
+                              letterSpacing: 0.9,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
                 ...trailingActions,
@@ -249,33 +247,37 @@ class PasalShellScaffold extends ConsumerWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            headerMeta.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.headlineSmall?.copyWith(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                              height: 1.1,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              headerMeta.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: t.headlineSmall?.copyWith(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.3,
+                                height: 1.1,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            headerMeta.subtitle.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.labelSmall?.copyWith(
-                              color: c.outline,
-                              letterSpacing: 0.9,
-                              fontSize: 10,
+                            const SizedBox(height: 2),
+                            Text(
+                              headerMeta.subtitle.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: t.labelSmall?.copyWith(
+                                color: c.outline,
+                                letterSpacing: 0.9,
+                                fontSize: 10,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                     if (currentIndex == 3 && canManageStock) ...[
@@ -383,25 +385,28 @@ class _ProfileAvatarButton extends StatelessWidget {
       button: true,
       label: 'Profile & Settings',
       child: PasalPressable(
+        ensureMinTouchTarget: true,
         borderRadius: BorderRadius.circular(AppRadii.pill),
         onTap: onTap,
         child: Tooltip(
           message: 'Profile & Settings',
-          child: Container(
-            key: const ValueKey<String>('topbar-profile-btn'),
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: c.primary,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              initials,
-              style: t.labelMedium?.copyWith(
-                color: c.onPrimary,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
+          child: Center(
+            child: Container(
+              key: const ValueKey<String>('topbar-profile-btn'),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: c.primary,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                initials,
+                style: t.labelMedium?.copyWith(
+                  color: c.onPrimary,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
               ),
             ),
           ),
