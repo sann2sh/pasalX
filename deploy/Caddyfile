@@ -1,8 +1,8 @@
 {
-	email admin@skisub.com
+	email admin@example.com
 }
 
-pasalx.skisub.com {
+pasalx.example.com {
 	encode gzip zstd
 
 	header {
